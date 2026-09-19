@@ -1,0 +1,16 @@
+# Entorno virtual y caché de Python (Backend)
+backend/venv/
+backend/env/
+**/__pycache__/
+*.py[cod]
+*.sqlite3
+*.db
+
+# Archivos de entorno / secretos
+.env
+backend/.env
+frontend/.env
+
+# Archivos del sistema operativo y editores
+.DS_Store
+Thumbs.db
