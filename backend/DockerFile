@@ -1,0 +1,37 @@
+# 1. Imagen base oficial de Python ligera
+FROM python:3.11-slim
+
+# 2. Evita que Python escriba archivos .pyc y fuerza salida sin búfer para logs
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# 3. Directorio de trabajo dentro del contenedor
+WORKDIR /app
+
+# 4. Instalación de dependencias del sistema necesarias
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /lib/apt/lists/*
+
+# 5. Copiar e instalar dependencias de Python
+# (Comentado temporalmente si aún estás ajustando requirements.txt)
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# 6. Copiar el código del proyecto
+COPY . /app/
+
+# 7. Puerto expuesto para FastAPI
+EXPOSE 8000
+
+# ----------------------------------------------------------------------
+# MODO DESARROLLO / PLACEHOLDER (Para evitar errores de ejecución)
+# Descomenta el CMD final de Uvicorn cuando tu main.py esté listo.
+# ----------------------------------------------------------------------
+
+# Opción A (Para probar que la imagen compila sin ejecutar el servidor):
+# ENTRYPOINT ["tail", "-f", "/dev/null"]
+
+# Opción B (Comando final de producción/ejecución):
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
