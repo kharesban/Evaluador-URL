@@ -43,8 +43,3 @@ def analizar_similitud(url):
             logging.warning("Posible suplantación: %s → %s", dominio, oficial)
 
     return hallazgos
-
-
-if __name__ == "__main__":
-    url = input("Ingresa una URL: ")
-    print(analizar_similitud(url))
