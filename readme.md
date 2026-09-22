@@ -62,3 +62,28 @@ Crea un archivo llamado .env dentro de la carpeta backend/ e ingresa las claves 
 GOOGLE_SAFE_BROWSING_API_KEY=tu_api_key_aqui
 VIRUSTOTAL_API_KEY=tu_api_key_aqui
 ```
+## Nota: Cómo obtener las Claves de API (Google Safe Browsing y VirusTotal)
+
+### 1. Clave de API para Google Safe Browsing
+Para interactuar con el servicio de detección de amenazas de Google:
+
+* **Paso 1:** Ve a la consola de desarrolladores: [Google Cloud Console](https://console.cloud.google.com/).
+* **Paso 2:** Inicia sesión con tu cuenta de Google y crea un nuevo proyecto (o selecciona uno existente).
+* **Paso 3:** En el menú lateral, dirígete a **APIs & Services** (APIs y servicios) > **Library** (Biblioteca).
+* **Paso 4:** En el buscador, escribe **"Safe Browsing API"** y selecciona la opción oficial.
+* **Paso 5:** Haz clic en el botón **Enable** (Habilitar).
+* **Paso 6:** Ve a la pestaña **Credentials** (Credenciales), haz clic en **Create Credentials** (Crear credenciales) y selecciona **API Key**.
+* **Paso 7:** Copia el token generado y pégalo en tu archivo `.env` en la variable `GOOGLE_SAFE_BROWSING_API_KEY`.
+
+---
+
+### 2. Clave de API para VirusTotal
+Para consultar la reputación del dominio en múltiples motores antivirus:
+
+* **Paso 1:** Ve al portal oficial: [VirusTotal](https://www.virustotal.com/).
+* **Paso 2:** Haz clic en **Sign Up** (Registrarse) en la esquina superior derecha y crea una cuenta gratuita (o inicia sesión si ya posees una).
+* **Paso 3:** Confirma tu correo electrónico si acabas de registrarte.
+* **Paso 4:** Haz clic en tu nombre de usuario/avatar en la esquina superior derecha y selecciona **API key**.
+* **Paso 5:** Copia la cadena de texto de tu clave personal (**API Key**).
+* **Paso 6:** Pégala en tu archivo `.env` en la variable `VIRUSTOTAL_API_KEY`.
+
