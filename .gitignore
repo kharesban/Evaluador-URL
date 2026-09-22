@@ -5,6 +5,7 @@ backend/env/
 *.py[cod]
 *.sqlite3
 *.db
+.venv/
 
 # Archivos de entorno / secretos
 .env

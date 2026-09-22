@@ -21,6 +21,7 @@ function App() {
     setCargando(true);
 
     try {
+      // Iniciar el análisis y obtener el UUID de la tarea.
       const respuesta = await fetch("http://localhost:8000/analizar", {
         method: "POST",
         headers: {
@@ -29,23 +30,52 @@ function App() {
         body: JSON.stringify({ url: urlLimpia }),
       });
 
-      const datos = await respuesta.json();
-
       if (!respuesta.ok) {
-        const detalle =
-          typeof datos.detail === "string"
-            ? datos.detail
-            : "No se pudo procesar la URL. Revisa que esté bien escrita.";
-
-        setMensaje(detalle);
-        return;
+        throw new Error(
+          "No se pudo iniciar el análisis. Revisa la URL."
+        );
       }
 
-      setResultado(datos);
+      const tarea = await respuesta.json();
+
+      // Consultar el estado cada segundo.
+      for (let intento = 0; intento < 30; intento++) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        const consulta = await fetch(
+          `http://localhost:8000/tareas/${tarea.id}`,
+          { cache: "no-store" }
+        );
+
+        if (!consulta.ok) {
+          throw new Error(
+            "No se pudo consultar la tarea. Intenta analizar nuevamente."
+          );
+        }
+
+        const estado = await consulta.json();
+
+        if (estado.estado === "completado") {
+          setResultado(estado.resultado);
+          return;
+        }
+
+        if (estado.estado === "error") {
+          throw new Error(estado.mensaje);
+        }
+
+        if (estado.estado !== "en_proceso") {
+          throw new Error("El servidor devolvió un estado desconocido.");
+        }
+      }
+
+      throw new Error(
+        "Se alcanzó el límite de consultas. El análisis podría seguir en proceso."
+      );
     } catch (error) {
       console.error(error);
       setMensaje(
-        "No fue posible completar el análisis. Comprueba que el backend esté ejecutándose."
+        error.message || "No fue posible realizar el análisis."
       );
     } finally {
       setCargando(false);
@@ -59,9 +89,11 @@ function App() {
       <div>
         <input
           type="text"
+          aria-label="URL que deseas analizar"
           placeholder="Ingrese una URL"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
+          disabled={cargando}
         />
 
         <button onClick={analizarURL} disabled={cargando}>
@@ -69,7 +101,18 @@ function App() {
         </button>
       </div>
 
-      {mensaje && <p className="error">{mensaje}</p>}
+      {cargando && (
+        <div role="status" aria-live="polite">
+          <p>Analizando URL, por favor espera...</p>
+          <progress aria-label="Análisis en proceso" />
+        </div>
+      )}
+
+      {mensaje && (
+        <p className="error" role="alert">
+          {mensaje}
+        </p>
+      )}
 
       {resultado && (
         <div className="resultado">
@@ -79,7 +122,7 @@ function App() {
 
           <p>
             Puntuación de riesgo:{" "}
-            {resultado.riesgo.puntuacion === null
+            {resultado.riesgo.puntuacion == null
               ? "Sin información suficiente"
               : `${resultado.riesgo.puntuacion}/5`}
           </p>
