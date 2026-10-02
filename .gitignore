@@ -1,16 +1,28 @@
-# Entorno virtual y caché de Python (Backend)
-backend/venv/
-backend/env/
-**/__pycache__/
+# Entornos virtuales de Python
+.venv/
+venv/
+env/
+
+# Caché de Python
+__pycache__/
 *.py[cod]
+
+# Bases de datos locales
 *.sqlite3
 *.db
 
-# Archivos de entorno / secretos
-.env
-backend/.env
-frontend/.env
+# Dependencias y compilación del frontend
+node_modules/
+dist/
 
-# Archivos del sistema operativo y editores
+# Archivos de entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Logs locales
+*.log
+
+# Archivos del sistema operativo
 .DS_Store
 Thumbs.db
