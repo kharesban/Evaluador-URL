@@ -11,7 +11,8 @@ def obtener_info_whois(domain: str) -> dict:
 
         dias_antiguedad = None
         if isinstance(creation_date, datetime):
-            dias_antiguedad = (datetime.now() - creation_date).days
+         ahora = datetime.now(creation_date.tzinfo)
+         dias_antiguedad = (ahora - creation_date).days
 
         return {
             "registrador": w.registrar,

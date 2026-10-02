@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 # Importaciones del validador y diagnóstico externo
 from app.validador.analisisUrl import normalizacion_analisis_url
+from app.validador.similitud_dominio import analizar_similitud
 from app.diagnostico_externo import (
     consultar_google_safe_browsing,
     verificar_ssl,
@@ -87,18 +88,31 @@ def menu():
                 print(f"  - Entrada original:  {url_entrada}")
                 print(f"  - URL Normalizada:   {url_normalizada}")
                 
-                # Despliegue de HU 8 (Estructura de la cadena de texto)
+                # Extraer el dominio limpio
+                dominio_extraido = urlparse(url_normalizada).netloc
+                
+                # Evaluación de Typosquatting / Similitud de Dominio
+                resultado_similitud = analizar_similitud(dominio_extraido)
+
+                # Despliegue de HU 8 (Estructura léxica + Typosquatting)
                 if metricas:
-                    print("\n[HU 8] Análisis Léxico / Estructura:")
+                    print("\nAnálisis Léxico / Estructura:")
                     print(f"  - Longitud total: {metricas['longitud_total']} caracteres")
                     print(f"  - Cantidad de subdominios: {metricas['cantidad_subdominios']}")
                     print(f"  - Símbolos especiales: {metricas['simbolos_sospechosos']}")
+                    
+                    # Mostrar alerta de Typosquatting si la función detectó algo
+                    if resultado_similitud and resultado_similitud.get("es_sospechoso"):
+                        print(f"  - 🚨 Alerta de Typosquatting: {resultado_similitud.get('mensaje')}")
+                    else:
+                        print("  - ✅ No se detectó suplantación visual de marcas conocidas")
+
                     if metricas['banderas_alerta']:
                         print(f"  - ⚠️ Alertas de estructura: {', '.join(metricas['banderas_alerta'])}")
                     else:
                         print("  - ✅ Estructura léxica dentro de parámetros normales")
 
-                # 2. Ejecutar HU 5, HU 6 y HU 7 (Diagnóstico Externe)
+                # 2. Ejecutar HU 5, HU 6 y HU 7 (Diagnóstico Externo)
                 asyncio.run(ejecutar_diagnostico_completo(url_normalizada))
                 
             else:
