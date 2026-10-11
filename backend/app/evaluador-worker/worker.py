@@ -52,6 +52,7 @@ async def procesar_analisis(url: str) -> dict:
     resultado["riesgo"] = calcular_riesgo(
         resultado["fuentes"],
         hallazgos,
+        metricas
     )
 
     return resultado

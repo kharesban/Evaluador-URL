@@ -1,13 +1,13 @@
 PESOS = {
-    "reputacion": 40,
+    "reputacion": 35,
     "antiguedad": 20,
     "ssl": 15,
-    "similitud": 25,
+    "patrones_url": 15,
+    "similitud": 15,
 }
 
 
-def calcular_riesgo(fuentes, hallazgos_similitud):
-    # Solo utilizar datos de consultas que terminaron correctamente.
+def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas):
     def obtener_datos(nombre):
         fuente = fuentes.get(nombre, {})
         if fuente.get("estado") == "ok":
@@ -20,27 +20,24 @@ def calcular_riesgo(fuentes, hallazgos_similitud):
     ssl = obtener_datos("ssl")
     whois = obtener_datos("whois")
 
-    # None significa que falta información para evaluar el indicador.
+    # None indica que faltan datos; no se interpreta como riesgo bajo.
     indicadores = {
         "reputacion": None,
         "antiguedad": None,
         "ssl": None,
+        "patrones_url": None,
         "similitud": None,
     }
 
-    # REPUTACIÓN (VirusTotal + Google Safe Browsing + PhishTank)
-    # Se considera phishing si PhishTank lo marca activo o si está registrado en su base de datos histórica
     es_phishing_pt = (
-        phishtank.get("es_phishing") is True 
+        phishtank.get("es_phishing") is True
         or phishtank.get("en_base_datos") is True
     )
     es_malicioso_vt = vt.get("maliciosos", 0) > 0
     es_malicioso_gsb = google.get("es_maliciosa") is True
 
-    # 1 = Riesgo máximo detectado
     if es_phishing_pt or es_malicioso_vt or es_malicioso_gsb:
         indicadores["reputacion"] = 1
-    # 0 = Sin hallazgos y evaluado
     elif (
         vt.get("es_conocida") is True
         and vt.get("maliciosos") == 0
@@ -50,7 +47,6 @@ def calcular_riesgo(fuentes, hallazgos_similitud):
     ):
         indicadores["reputacion"] = 0
 
-    # ANTIGUEDAD CON WHOIS
     dias = whois.get("dias_antiguedad")
     if isinstance(dias, (int, float)) and dias >= 0:
         if dias < 30:
@@ -65,11 +61,27 @@ def calcular_riesgo(fuentes, hallazgos_similitud):
     elif ssl.get("valido") is False:
         indicadores["ssl"] = 1
 
-    # SIMILITUD (TYPOSQUATTING)
+    # Una alerta aporta medio punto de este indicador;
+    # dos o más aportan el punto completo.
+    claves_patrones = (
+        "longitud_total",
+        "cantidad_subdominios",
+        "simbolos_sospechosos",
+        "es_ip_directa",
+        "banderas_alerta",
+    )
+    if (
+        isinstance(metricas_lexicas, dict)
+        and all(clave in metricas_lexicas for clave in claves_patrones)
+        and isinstance(metricas_lexicas["banderas_alerta"], list)
+    ):
+        indicadores["patrones_url"] = min(
+            len(metricas_lexicas["banderas_alerta"]) / 2, 1
+        )
+
     if hallazgos_similitud is not None:
         indicadores["similitud"] = 1 if hallazgos_similitud else 0
 
-    # CALCULO
     puntos = 0
     peso_evaluado = 0
     faltantes = []
@@ -81,12 +93,11 @@ def calcular_riesgo(fuentes, hallazgos_similitud):
             puntos += valor * PESOS[nombre]
             peso_evaluado += PESOS[nombre]
 
-    # Ajustar a una escala de 1 a 5 usando los indicadores disponibles.
     puntuacion = None
     if peso_evaluado > 0:
         puntuacion = round(1 + (puntos / peso_evaluado) * 4, 2)
 
-    # REGLA PARA PHISHTANK (Override de riesgo crítico)
+    # Conservar la regla crítica que agregó tu compañero.
     if es_phishing_pt:
         puntuacion = 5.0
 
