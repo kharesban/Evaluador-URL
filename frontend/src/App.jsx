@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import "./App.css";
 
 export function EvaluadorPrincipal() {
@@ -76,7 +75,6 @@ export function EvaluadorPrincipal() {
 
   return (
     <div className="container">
-      
       <h1>Evaluador de URL</h1>
 
       <div>
@@ -108,49 +106,99 @@ export function EvaluadorPrincipal() {
       )}
 
       {resultado && (
-  <div className="resultado">
-    <h2>Resultado del análisis</h2>
+        <div className="resultado">
+          <h2>Resultado del análisis</h2>
 
-    <p>Estado de las consultas: {resultado.estado}</p>
+          {tiempoEjecucion && (
+            <p><strong>Tiempo de ejecución:</strong> {tiempoEjecucion} segundos</p>
+          )}
 
-    <p>
-      Puntuación de riesgo:{" "}
-      {resultado.riesgo.puntuacion == null
-        ? "Sin información suficiente"
-        : `${resultado.riesgo.puntuacion}/5`}
-    </p>
-
-    <p>
-      Cobertura: {resultado.riesgo.cobertura_porcentaje}%
-    </p>
-
-    {!resultado.riesgo.evaluacion_completa && (
-      <p className="error">
-        Evaluación incompleta. Indicadores sin datos:{" "}
-        {resultado.riesgo.indicadores_faltantes.join(", ")}.
-      </p>
-    )}
-
-    <p>
-      La puntuación va de 1 a 5: 1 representa el menor riesgo
-      y 5 el mayor. Una puntuación de 1 no garantiza seguridad.
-    </p>
-
-    {resultado.hallazgos_similitud?.length > 0 && (
-      <div>
-        <h3>Hallazgos de similitud</h3>
-
-        {resultado.hallazgos_similitud.map((hallazgo, indice) => (
-          <p key={indice}>
-            {hallazgo.dominio} se parece a {hallazgo.referencia}
-            {" "}({hallazgo.similitud}% de similitud).
-            Posible typosquatting.
+          <p>
+            <strong>Puntuación de riesgo:</strong>{" "}
+            {resultado.riesgo?.puntuacion == null
+              ? "Sin información suficiente"
+              : `${resultado.riesgo.puntuacion} / 5`}
           </p>
-        ))}
-      </div>
-    )}
-  </div>
-)}
+
+          <p>
+            <strong>Cobertura del análisis:</strong> {resultado.riesgo?.cobertura_porcentaje}%
+          </p>
+
+          {!resultado.riesgo?.evaluacion_completa && (
+            <p className="error">
+              Evaluación incompleta. Indicadores sin datos:{" "}
+              {resultado.riesgo?.indicadores_faltantes?.join(", ")}.
+            </p>
+          )}
+
+          <p style={{ fontSize: "12px", color: "#666" }}>
+            La puntuación va de 1 a 5: 1 representa el menor riesgo y 5 el mayor. 
+            Una puntuación de 1 no garantiza seguridad absoluta.
+          </p>
+
+          {/* Desglose de Fuentes de Reputación */}
+          {resultado.fuentes && (
+            <div style={{ marginTop: "15px", textAlign: "left" }}>
+              <h3>Fuentes analizadas:</h3>
+              <ul>
+                {resultado.fuentes.phishtank && (
+                  <li>
+                    <strong>PhishTank:</strong>{" "}
+                    {resultado.fuentes.phishtank.estado === "ok" ? (
+                      resultado.fuentes.phishtank.datos?.es_phishing ? (
+                        <span style={{ color: "red", fontWeight: "bold" }}>🚨 DETECTADO COMO PHISHING</span>
+                      ) : (
+                        <span style={{ color: "green" }}>Limpio / No reportado</span>
+                      )
+                    ) : (
+                      <span style={{ color: "orange" }}>Error o no disponible</span>
+                    )}
+                  </li>
+                )}
+
+                {resultado.fuentes.virustotal && (
+                  <li>
+                    <strong>VirusTotal:</strong>{" "}
+                    {resultado.fuentes.virustotal.estado === "ok" ? (
+                      `${resultado.fuentes.virustotal.datos?.maliciosos || 0} detecciones maliciosas`
+                    ) : (
+                      <span style={{ color: "orange" }}>Sin respuesta</span>
+                    )}
+                  </li>
+                )}
+
+                {resultado.fuentes.safe_browsing && (
+                  <li>
+                    <strong>Google Safe Browsing:</strong>{" "}
+                    {resultado.fuentes.safe_browsing.estado === "ok" ? (
+                      resultado.fuentes.safe_browsing.datos?.es_maliciosa ? (
+                        <span style={{ color: "red", fontWeight: "bold" }}>SITIO AMENAZANTE</span>
+                      ) : (
+                        <span style={{ color: "green" }}>Limpio</span>
+                      )
+                    ) : (
+                      <span style={{ color: "orange" }}>Sin respuesta</span>
+                    )}
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {/* Hallazgos de Typosquatting */}
+          {resultado.hallazgos_similitud?.length > 0 && (
+            <div style={{ marginTop: "15px", textAlign: "left" }}>
+              <h3>Hallazgos de similitud (Typosquatting)</h3>
+              {resultado.hallazgos_similitud.map((hallazgo, indice) => (
+                <p key={indice} style={{ color: "orange" }}>
+                  ⚠️ {hallazgo.dominio} se parece a <strong>{hallazgo.referencia}</strong>{" "}
+                  ({hallazgo.similitud}% de similitud).
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

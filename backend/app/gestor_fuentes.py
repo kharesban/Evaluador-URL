@@ -1,158 +1,43 @@
 import asyncio
 import importlib
 import inspect
-import multiprocessing as mp
-from multiprocessing.connection import wait
 from time import monotonic
 from urllib.parse import urlparse
 
-TIEMPO_LIMITE = 10
+TIEMPO_LIMITE = 4.0
 
-
-def _consultar(modulo, funcion, argumento, canal):
-    """Ejecuta una fuente en un proceso separado."""
+async def _ejecutar_fuente_async(modulo_str: str, funcion_str: str, argumento: str) -> dict:
     try:
-        consulta = getattr(importlib.import_module(modulo), funcion)
-        datos = consulta(argumento)
+        modulo = importlib.import_module(modulo_str)
+        func = getattr(modulo, funcion_str)
 
-        # Permite utilizar también las funciones async existentes.
-        if inspect.isawaitable(datos):
-            datos = asyncio.run(datos)
+        if inspect.iscoroutinefunction(func):
+            tarea = func(argumento)
+        else:
+            loop = asyncio.get_running_loop()
+            tarea = loop.run_in_executor(None, func, argumento)
+
+        datos = await asyncio.wait_for(tarea, timeout=TIEMPO_LIMITE)
 
         if not isinstance(datos, dict):
-            resultado = {
-                "estado": "error",
-                "error": "Respuesta no válida"
-            }
-        elif datos.get("error"):
-            resultado = {
-                "estado": "error",
-                "error": str(datos["error"])
-            }
-        else:
-            resultado = {"estado": "ok", "datos": datos}
+            return {"estado": "error", "error": "Respuesta no válida"}
+        
+        # Si el dict tiene una clave 'error' con texto descriptivo real, lo tratamos como error
+        error_val = datos.get("error")
+        if error_val is not None and error_val is not False and str(error_val).strip() != "":
+            return {"estado": "error", "error": str(error_val)}
+        
+        # Si la fuente respondió exitosamente
+        return {"estado": "ok", "datos": datos}
 
+    except asyncio.TimeoutError:
+        return {"estado": "timeout", "error": "Se agotó el tiempo de espera"}
     except Exception as error:
-        resultado = {
-            "estado": "error",
-            "error": type(error).__name__
-        }
-
-    try:
-        canal.send((monotonic(), resultado))
-    finally:
-        canal.close()
+        return {"estado": "error", "error": type(error).__name__}
 
 
-def gestionar_fuentes(fuentes):
-    """Recoge las respuestas durante un máximo de 10 segundos."""
+async def analizar_fuentes(url: str) -> dict:
     inicio = monotonic()
-    vencimiento = inicio + TIEMPO_LIMITE
-    contexto = mp.get_context("spawn")
-
-    procesos = []
-    pendientes = {}
-
-    resultados = {
-        nombre: {
-            "estado": "timeout",
-            "error": "Se agotó el tiempo de espera"
-        }
-        for nombre in fuentes
-    }
-
-    try:
-        # Iniciar las fuentes sin esperar a que termine la anterior.
-        for nombre, (modulo, funcion, argumento) in fuentes.items():
-            if monotonic() >= vencimiento:
-                break
-
-            receptor, emisor = contexto.Pipe(duplex=False)
-
-            proceso = contexto.Process(
-                target=_consultar,
-                args=(modulo, funcion, argumento, emisor)
-            )
-
-            try:
-                proceso.start()
-            except Exception as error:
-                receptor.close()
-                proceso.close()
-                resultados[nombre] = {
-                    "estado": "error",
-                    "error": type(error).__name__
-                }
-            else:
-                procesos.append(proceso)
-                pendientes[receptor] = nombre
-            finally:
-                emisor.close()
-
-        # Recoger las respuestas que lleguen dentro del plazo.
-        while pendientes:
-            restante = vencimiento - monotonic()
-
-            if restante <= 0:
-                break
-
-            for canal in wait(list(pendientes), timeout=restante):
-                nombre = pendientes.pop(canal)
-
-                try:
-                    finalizacion, resultado = canal.recv()
-
-                    if finalizacion <= vencimiento:
-                        resultados[nombre] = resultado
-
-                except (EOFError, OSError):
-                    resultados[nombre] = {
-                        "estado": "error",
-                        "error": "Proceso sin respuesta"
-                    }
-                finally:
-                    canal.close()
-
-    finally:
-        # Cerrar los procesos pendientes, incluso si una fuente se bloquea.
-        for proceso in procesos:
-            if proceso.is_alive():
-                proceso.terminate()
-
-        for proceso in procesos:
-            proceso.join(timeout=0.1)
-
-            if proceso.is_alive():
-                proceso.kill()
-                proceso.join(timeout=0.1)
-
-            if not proceso.is_alive():
-                proceso.close()
-
-        for canal in pendientes:
-            canal.close()
-
-    disponibles = sum(
-        resultado["estado"] == "ok"
-        for resultado in resultados.values()
-    )
-
-    if disponibles == 0:
-        estado = "sin_resultados"
-    elif disponibles == len(fuentes):
-        estado = "completo"
-    else:
-        estado = "parcial"
-
-    return {
-        "estado": estado,
-        "duracion_segundos": round(monotonic() - inicio, 3),
-        "fuentes": resultados
-    }
-
-
-def analizar_fuentes(url):
-    """Prepara las llamadas a los módulos de tus compañeros."""
     url = str(url).strip()
 
     if "://" not in url:
@@ -161,7 +46,7 @@ def analizar_fuentes(url):
     dominio = urlparse(url).hostname
 
     if not dominio:
-        raise ValueError("La URL debe contener un dominio")
+        raise ValueError("La URL debe contener un dominio válido")
 
     base = "app.diagnostico_externo."
 
@@ -176,6 +61,11 @@ def analizar_fuentes(url):
             "consultar_google_safe_browsing",
             url
         ),
+        "phishtank": (
+            base + "phishTank_module",
+            "consultar_phishtank",
+            url
+        ),
         "ssl": (
             base + "SSL_module",
             "verificar_ssl",
@@ -188,4 +78,34 @@ def analizar_fuentes(url):
         )
     }
 
-    return gestionar_fuentes(fuentes)
+    tareas = {
+        nombre: _ejecutar_fuente_async(mod, func, arg)
+        for nombre, (mod, func, arg) in fuentes.items()
+    }
+
+    nombres = list(tareas.keys())
+    respuestas = await asyncio.gather(*tareas.values(), return_exceptions=True)
+
+    resultados = {}
+    for nombre, resp in zip(nombres, respuestas):
+        if isinstance(resp, Exception):
+            resultados[nombre] = {"estado": "error", "error": str(resp)}
+        else:
+            resultados[nombre] = resp
+
+    disponibles = sum(
+        1 for r in resultados.values() if r.get("estado") == "ok"
+    )
+
+    if disponibles == 0:
+        estado = "sin_resultados"
+    elif disponibles == len(fuentes):
+        estado = "completo"
+    else:
+        estado = "parcial"
+
+    return {
+        "estado": estado,
+        "duracion_segundos": round(monotonic() - inicio, 3),
+        "fuentes": resultados
+    }

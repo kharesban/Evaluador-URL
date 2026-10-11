@@ -5,9 +5,15 @@ from collections import deque
 from pathlib import Path
 from uuid import uuid4
 
+
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
+from dotenv import load_dotenv
+from pathlib import Path
+
+ruta_env = Path(__file__).resolve().parent / ".env"
+load_dotenv(ruta_env, override=True)
 
 # ==========================================
 # 1. CONFIGURACIÓN DE LOGS EN MEMORIA Y CONSOLA
@@ -70,12 +76,12 @@ class SolicitudAnalisis(BaseModel):
 # ==========================================
 # 3. PROCESAMIENTO CON MEDICIÓN DE TIEMPOS
 # ==========================================
-def ejecutar_analisis(tarea_id: str, url: str):
+async def ejecutar_analisis(tarea_id: str, url: str):
     logger.info(f"[TAREA {tarea_id}] Iniciando análisis asíncrono para: {url}")
     t_inicio = time.perf_counter()
 
     try:
-        resultado = procesar_analisis(url)
+        resultado = await procesar_analisis(url)
         duracion = time.perf_counter() - t_inicio
         
         logger.debug(f"[PERFORMANCE] Tarea {tarea_id} finalizada en {duracion:.4f}s")
