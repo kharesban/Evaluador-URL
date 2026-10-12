@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Routes, Route } from "react-router-dom";
+import VerLogs from "./verLogs.jsx";
 import "./App.css";
 
 export function EvaluadorPrincipal() {
@@ -157,51 +159,80 @@ export function EvaluadorPrincipal() {
                 Una puntuación de 1 no garantiza seguridad absoluta.
               </p>
 
-              {/* Desglose de Fuentes de Reputación */}
+              {/* DESGLOSE COMPLETO DE FUENTES ANALIZADAS */}
               {resultado.fuentes && (
                 <div style={{ marginTop: "15px", textAlign: "left" }}>
                   <h3>Fuentes analizadas:</h3>
                   <ul>
-                    {resultado.fuentes.phishtank && (
-                      <li>
-                        <strong>PhishTank:</strong>{" "}
-                        {resultado.fuentes.phishtank.estado === "ok" ? (
-                          resultado.fuentes.phishtank.datos?.es_phishing ? (
-                            <span style={{ color: "red", fontWeight: "bold" }}>🚨 DETECTADO COMO PHISHING</span>
-                          ) : (
-                            <span style={{ color: "green" }}>Limpio / No reportado</span>
-                          )
+                    {/* PhishTank */}
+                    <li>
+                      <strong>PhishTank:</strong>{" "}
+                      {resultado.fuentes.phishtank?.estado === "ok" ? (
+                        resultado.fuentes.phishtank.datos?.es_phishing ? (
+                          <span style={{ color: "red", fontWeight: "bold" }}>🚨 DETECTADO COMO PHISHING</span>
                         ) : (
-                          <span style={{ color: "orange" }}>Error o no disponible</span>
-                        )}
-                      </li>
-                    )}
+                          <span style={{ color: "green" }}>Limpio / No reportado</span>
+                        )
+                      ) : (
+                        <span style={{ color: "orange" }}>⚠️ Servicio no disponible o sin respuesta</span>
+                      )}
+                    </li>
 
-                    {resultado.fuentes.virustotal && (
-                      <li>
-                        <strong>VirusTotal:</strong>{" "}
-                        {resultado.fuentes.virustotal.estado === "ok" ? (
-                          `${resultado.fuentes.virustotal.datos?.maliciosos || 0} detecciones maliciosas`
+                    {/* VirusTotal */}
+                    <li>
+                      <strong>VirusTotal:</strong>{" "}
+                      {resultado.fuentes.virustotal?.estado === "ok" ? (
+                        resultado.fuentes.virustotal.datos?.maliciosos > 0 ? (
+                          <span style={{ color: "red", fontWeight: "bold" }}>
+                            {resultado.fuentes.virustotal.datos.maliciosos} detecciones maliciosas
+                          </span>
                         ) : (
-                          <span style={{ color: "orange" }}>Sin respuesta</span>
-                        )}
-                      </li>
-                    )}
+                          <span style={{ color: "green" }}>0 detecciones maliciosas</span>
+                        )
+                      ) : (
+                        <span style={{ color: "orange" }}>⚠️ Sin respuesta</span>
+                      )}
+                    </li>
 
-                    {resultado.fuentes.safe_browsing && (
-                      <li>
-                        <strong>Google Safe Browsing:</strong>{" "}
-                        {resultado.fuentes.safe_browsing.estado === "ok" ? (
-                          resultado.fuentes.safe_browsing.datos?.es_maliciosa ? (
-                            <span style={{ color: "red", fontWeight: "bold" }}>SITIO AMENAZANTE</span>
-                          ) : (
-                            <span style={{ color: "green" }}>Limpio</span>
-                          )
+                    {/* Google Safe Browsing */}
+                    <li>
+                      <strong>Google Safe Browsing:</strong>{" "}
+                      {resultado.fuentes.safe_browsing?.estado === "ok" ? (
+                        resultado.fuentes.safe_browsing.datos?.es_maliciosa ? (
+                          <span style={{ color: "red", fontWeight: "bold" }}>SITIO AMENAZANTE</span>
                         ) : (
-                          <span style={{ color: "orange" }}>Sin respuesta</span>
-                        )}
-                      </li>
-                    )}
+                          <span style={{ color: "green" }}>Limpio</span>
+                        )
+                      ) : (
+                        <span style={{ color: "orange" }}>⚠️ Sin respuesta</span>
+                      )}
+                    </li>
+
+                    {/* Antigüedad / WHOIS */}
+                    <li>
+                      <strong>Antigüedad (WHOIS):</strong>{" "}
+                      {resultado.fuentes.whois?.estado === "ok" && resultado.fuentes.whois.datos?.dias_antiguedad != null ? (
+                        <span style={{ color: "green" }}>
+                          {resultado.fuentes.whois.datos.dias_antiguedad} días de antigüedad
+                        </span>
+                      ) : (
+                        <span style={{ color: "orange" }}>⚠️ Sin datos de antigüedad / WHOIS no disponible</span>
+                      )}
+                    </li>
+
+                    {/* Certificado SSL */}
+                    <li>
+                      <strong>Certificado SSL:</strong>{" "}
+                      {resultado.fuentes.ssl?.estado === "ok" ? (
+                        resultado.fuentes.ssl.datos?.valido ? (
+                          <span style={{ color: "green" }}>Válido</span>
+                        ) : (
+                          <span style={{ color: "red", fontWeight: "bold" }}>Inválido o expirado</span>
+                        )
+                      ) : (
+                        <span style={{ color: "orange" }}>⚠️ Sin datos de certificado SSL</span>
+                      )}
+                    </li>
                   </ul>
                 </div>
               )}
@@ -226,4 +257,11 @@ export function EvaluadorPrincipal() {
   );
 }
 
-export default EvaluadorPrincipal;
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<EvaluadorPrincipal />} />
+      <Route path="/logs" element={<VerLogs />} />
+    </Routes>
+  );
+}

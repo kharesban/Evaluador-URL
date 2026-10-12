@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-export function VisorLogs() {
+export function VerLogs() {
   const [logs, setLogs] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [autoUpdate, setAutoUpdate] = useState(true);
@@ -78,3 +78,5 @@ export function VisorLogs() {
     </div>
   );
 }
+
+export default VerLogs;
