@@ -1,6 +1,8 @@
 import logging
 from urllib.parse import urlparse
+
 from rapidfuzz.distance import DamerauLevenshtein
+
 
 DOMINIOS_OFICIALES = ["google.com", "facebook.com", "microsoft.com"]
 
@@ -25,21 +27,32 @@ def analizar_similitud(url):
     hallazgos = []
 
     for oficial in DOMINIOS_OFICIALES:
-        distancia = DamerauLevenshtein.distance(dominio, oficial)
+        # Comparar la parte final aunque la URL tenga subdominios.
+        # Ejemplo: sub.googel.com -> googel.com
+        cantidad_partes = len(oficial.split("."))
+        dominio_comparable = ".".join(
+            dominio.split(".")[-cantidad_partes:]
+        )
 
-        # Una edición de diferencia genera una alerta.
+        distancia = DamerauLevenshtein.distance(
+            dominio_comparable, oficial
+        )
+
+        # Una o dos ediciones de diferencia generan una alerta.
         if 1 <= distancia <= 2:
             similitud = DamerauLevenshtein.normalized_similarity(
-                dominio, oficial
+                dominio_comparable, oficial
             )
 
             hallazgos.append({
                 "dominio": dominio,
                 "referencia": oficial,
                 "similitud": round(similitud * 100, 2),
-                "motivo": "Posible typosquatting"
+                "motivo": "Posible typosquatting",
             })
 
-            logging.warning("Posible suplantación: %s → %s", dominio, oficial)
+            logging.warning(
+                "Posible suplantación: %s → %s", dominio, oficial
+            )
 
     return hallazgos
