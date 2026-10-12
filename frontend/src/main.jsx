@@ -1,17 +1,13 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import App from './App.jsx'
 import './index.css'
-import EvaluadorPrincipal from './App.jsx'
-import { VisorLogs } from './verLogs.jsx'
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<EvaluadorPrincipal />} />
-        <Route path="/logs" element={<VisorLogs />} />
-      </Routes>
+      <App />
     </BrowserRouter>
-  </StrictMode>,
+  </React.StrictMode>,
 )
