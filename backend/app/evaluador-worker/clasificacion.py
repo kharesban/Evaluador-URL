@@ -6,7 +6,19 @@ PESOS = {
 }
 
 
-def calcular_riesgo(fuentes, hallazgos_similitud):
+def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
+    # 0. VALIDACIÓN DNS: Si el dominio no resuelve, no se otorga puntuación numérica
+    if metricas_lexicas and metricas_lexicas.get("dns_resuelto") is False:
+        return {
+            "puntuacion": None,
+            "es_dominio_invalido": True,
+            "mensaje": "La página no está registrada como un dominio válido o activo.",
+            "evaluacion_completa": False,
+            "cobertura_porcentaje": 0,
+            "indicadores": {},
+            "indicadores_faltantes": ["reputacion", "antiguedad", "ssl", "similitud"],
+        }
+
     # Solo utilizar datos de consultas que terminaron correctamente.
     def obtener_datos(nombre):
         fuente = fuentes.get(nombre, {})
@@ -20,7 +32,6 @@ def calcular_riesgo(fuentes, hallazgos_similitud):
     ssl = obtener_datos("ssl")
     whois = obtener_datos("whois")
 
-    # None significa que falta información para evaluar el indicador.
     indicadores = {
         "reputacion": None,
         "antiguedad": None,
@@ -28,29 +39,25 @@ def calcular_riesgo(fuentes, hallazgos_similitud):
         "similitud": None,
     }
 
-    # REPUTACIÓN (VirusTotal + Google Safe Browsing + PhishTank)
-    # Se considera phishing si PhishTank lo marca activo o si está registrado en su base de datos histórica
-    es_phishing_pt = (
-        phishtank.get("es_phishing") is True 
-        or phishtank.get("en_base_datos") is True
-    )
+    # 1. REPUTACIÓN (VirusTotal + Google Safe Browsing + PhishTank)
+    # Únicamente se considera si PhishTank confirmó que ES phishing (valid == True)
+    es_phishing_pt = phishtank.get("es_phishing") is True
     es_malicioso_vt = vt.get("maliciosos", 0) > 0
     es_malicioso_gsb = google.get("es_maliciosa") is True
 
     # 1 = Riesgo máximo detectado
     if es_phishing_pt or es_malicioso_vt or es_malicioso_gsb:
         indicadores["reputacion"] = 1
-    # 0 = Sin hallazgos y evaluado
+    # 0 = Sin hallazgos y evaluado correctamente
     elif (
         vt.get("es_conocida") is True
         and vt.get("maliciosos") == 0
         and google.get("es_maliciosa") is False
         and phishtank.get("es_phishing") is False
-        and phishtank.get("en_base_datos") is False
     ):
         indicadores["reputacion"] = 0
 
-    # ANTIGUEDAD CON WHOIS
+    # 2. ANTIGÜEDAD CON WHOIS
     dias = whois.get("dias_antiguedad")
     if isinstance(dias, (int, float)) and dias >= 0:
         if dias < 30:
@@ -60,16 +67,17 @@ def calcular_riesgo(fuentes, hallazgos_similitud):
         else:
             indicadores["antiguedad"] = 0
 
+    # 3. ESTADO SSL
     if ssl.get("valido") is True:
         indicadores["ssl"] = 0
     elif ssl.get("valido") is False:
         indicadores["ssl"] = 1
 
-    # SIMILITUD (TYPOSQUATTING)
+    # 4. SIMILITUD (TYPOSQUATTING)
     if hallazgos_similitud is not None:
         indicadores["similitud"] = 1 if hallazgos_similitud else 0
 
-    # CALCULO
+    # CÁLCULO
     puntos = 0
     peso_evaluado = 0
     faltantes = []
@@ -81,17 +89,25 @@ def calcular_riesgo(fuentes, hallazgos_similitud):
             puntos += valor * PESOS[nombre]
             peso_evaluado += PESOS[nombre]
 
-    # Ajustar a una escala de 1 a 5 usando los indicadores disponibles.
     puntuacion = None
     if peso_evaluado > 0:
-        puntuacion = round(1 + (puntos / peso_evaluado) * 4, 2)
+        puntuacion_calculada = round(1 + (puntos / peso_evaluado) * 4, 2)
 
-    # REGLA PARA PHISHTANK (Override de riesgo crítico)
+        # AJUSTE LÓGICO DE SEGURIDAD:
+        # Si faltan datos en indicadores (WHOIS/SSL) y el cálculo daría 1.0 (Limpio por omisión),
+        # se ajusta a un piso mínimo de 2.5/5.0 para evitar dar una calificación de "completamente seguro" a ciegas.
+        if faltantes and puntuacion_calculada < 2.5:
+            puntuacion = 2.5
+        else:
+            puntuacion = puntuacion_calculada
+
+    # REGLA CRÍTICA PARA PHISHTANK (Override directo a riesgo máximo)
     if es_phishing_pt:
         puntuacion = 5.0
 
     return {
         "puntuacion": puntuacion,
+        "es_dominio_invalido": False,
         "evaluacion_completa": not faltantes,
         "cobertura_porcentaje": peso_evaluado,
         "indicadores": indicadores,

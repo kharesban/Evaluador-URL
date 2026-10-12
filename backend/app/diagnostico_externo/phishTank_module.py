@@ -1,5 +1,3 @@
-# backend/app/diagnostico_externo/phishTank_module.py
-
 import logging
 from urllib.parse import quote
 import httpx
@@ -11,7 +9,8 @@ PHISHTANK_API_URL = "https://checkurl.phishtank.com/checkurl/"
 
 async def consultar_phishtank(url: str) -> dict:
     """
-    Consulta la API pública de PhishTank codificando correctamente las subrutas/paths.
+    Consulta PhishTank exigiendo que el reporte esté CONFIRMADO como phishing (valid == True).
+    Si valid es False o la URL no está en la base de datos, se considera limpia.
     """
     headers = {
         "User-Agent": "phishtank/app-evaluador-url",
@@ -20,23 +19,16 @@ async def consultar_phishtank(url: str) -> dict:
 
     url_limpia = url.strip()
     
-    # Generar variaciones de la URL (con/sin barra final y http/https)
+    # Probar la URL exacta y variaciones de barra final
     variaciones = [url_limpia]
-
     if url_limpia.endswith("/"):
         variaciones.append(url_limpia.rstrip("/"))
     else:
         variaciones.append(url_limpia + "/")
 
-    if url_limpia.startswith("https://"):
-        variaciones.append("http://" + url_limpia[8:])
-    elif url_limpia.startswith("http://"):
-        variaciones.append("https://" + url_limpia[7:])
-
     try:
-        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=3.0, follow_redirects=True) as client:
             for u in variaciones:
-                # Codificar la URL para asegurar que las rutas (/mito/) se transmitan correctamente
                 url_encoded = quote(u, safe="")
                 body = f"url={url_encoded}&format=json"
 
@@ -52,25 +44,28 @@ async def consultar_phishtank(url: str) -> dict:
                         results = datos.get("results", {})
 
                         in_database = results.get("in_database", False)
-                        valid = results.get("valid", False)
+                        valid = results.get("valid", False) # True si PhishTank confirmó que ES phishing
 
-                        # Si está en la base de datos o si está confirmado como valido/online
-                        if in_database or valid:
-                            logger.info(f"[PhishTank] Phishing confirmado para: {u}")
+                        # ÚNICAMENTE si PhishTank confirmó que es un PHISHING VÁLIDO
+                        if in_database is True and valid is True:
+                            logger.info(f"[PhishTank] Phishing verificado y confirmado para: {u}")
                             return {
                                 "en_base_datos": True,
                                 "es_phishing": True,
-                                "esta_online": valid,
+                                "esta_online": results.get("in_database", True),
                                 "phish_id": results.get("phish_id"),
                                 "phish_detail_page": results.get("phish_detail_page")
                             }
+
                 except Exception as sub_e:
-                    logger.warning(f"[PhishTank] Error con la variación {u}: {sub_e}")
+                    logger.warning(f"[PhishTank] Error evaluando variación {u}: {sub_e}")
                     continue
 
+        # Si no está en la base de datos O si estuvo reportado pero 'valid' es False (falso reporte)
         return {
             "en_base_datos": False,
-            "es_phishing": False
+            "es_phishing": False,
+            "esta_online": False
         }
 
     except Exception as e:

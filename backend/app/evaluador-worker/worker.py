@@ -1,5 +1,3 @@
-# backend/app/evaluador-worker/worker.py
-
 import asyncio
 import json
 import sys
@@ -52,6 +50,7 @@ async def procesar_analisis(url: str) -> dict:
     resultado["riesgo"] = calcular_riesgo(
         resultado["fuentes"],
         hallazgos,
+        metricas_lexicas=metricas
     )
 
     return resultado
