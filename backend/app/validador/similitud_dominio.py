@@ -2,7 +2,12 @@ import logging
 from urllib.parse import urlparse
 from rapidfuzz.distance import DamerauLevenshtein
 
-DOMINIOS_OFICIALES = ["google.com", "facebook.com", "microsoft.com"]
+DOMINIOS_OFICIALES = [
+    "google.com",
+    "facebook.com",
+    "microsoft.com",
+    "nu.com.co",
+]
 
 
 def analizar_similitud(url):
