@@ -37,6 +37,29 @@ function ResultadoRevision({ resultado }) {
               <p>
                 <strong>Cobertura del análisis:</strong> {resultado.riesgo?.cobertura_porcentaje}%
               </p>
+              {resultado.riesgo?.detalle_indicadores?.length > 0 && (
+                <section className="detalle-riesgo" aria-labelledby="titulo-detalle-riesgo">
+                  <h3 id="titulo-detalle-riesgo">¿Por qué obtuvimos esta calificación?</h3>
+                  <p className="detalle-riesgo-intro">La puntuación se calcula con los indicadores disponibles y sus pesos. Un impacto alto representa una señal de riesgo, no una certeza de ataque.</p>
+                  <ul className="lista-detalle-riesgo">
+                    {resultado.riesgo.detalle_indicadores.map((detalle) => (
+                      <li key={detalle.clave}>
+                        <div className="detalle-riesgo-cabecera">
+                          <strong>{detalle.indicador}</strong>
+                          <span className={`impacto ${detalle.estado === "sin_datos" ? "impacto--sin-datos" : `impacto--${(detalle.impacto || "bajo").toLowerCase()}`}`}>
+                            {detalle.estado === "sin_datos" ? "Sin datos" : `Impacto ${detalle.impacto}`}
+                          </span>
+                        </div>
+                        <p>{detalle.explicacion}</p>
+                        <small>Peso: {detalle.peso}%{detalle.estado === "evaluado" ? ` · Contribución ponderada: ${detalle.contribucion_ponderada}` : ""}</small>
+                      </li>
+                    ))}
+                  </ul>
+                  {resultado.fuentes?.phishtank?.estado === "ok" && resultado.fuentes.phishtank.datos?.es_phishing === true && (
+                    <p className="aviso">PhishTank confirmó phishing. La regla especial del algoritmo establece la puntuación final en 5/5.</p>
+                  )}
+                </section>
+              )}
               {!resultado.riesgo?.evaluacion_completa && (
                 <p className="error">
                   Evaluación incompleta. Indicadores sin datos:{" "}
