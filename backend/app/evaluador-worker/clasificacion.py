@@ -1,14 +1,18 @@
 PESOS = {
-    "reputacion": 40,
+    "reputacion": 35,
     "antiguedad": 20,
     "ssl": 15,
-    "similitud": 25,
+    "patrones_url": 15,
+    "similitud": 15,
 }
 
 
 def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
-    # 0. VALIDACIÓN DNS: Si el dominio no resuelve, no se otorga puntuación numérica
-    if metricas_lexicas and metricas_lexicas.get("dns_resuelto") is False:
+    # Un dominio que no resuelve por DNS no recibe puntuación numérica.
+    if (
+        isinstance(metricas_lexicas, dict)
+        and metricas_lexicas.get("dns_resuelto") is False
+    ):
         return {
             "puntuacion": None,
             "es_dominio_invalido": True,
@@ -16,10 +20,9 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
             "evaluacion_completa": False,
             "cobertura_porcentaje": 0,
             "indicadores": {},
-            "indicadores_faltantes": ["reputacion", "antiguedad", "ssl", "similitud"],
+            "indicadores_faltantes": list(PESOS),
         }
 
-    # Solo utilizar datos de consultas que terminaron correctamente.
     def obtener_datos(nombre):
         fuente = fuentes.get(nombre, {})
         if fuente.get("estado") == "ok":
@@ -36,19 +39,17 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
         "reputacion": None,
         "antiguedad": None,
         "ssl": None,
+        "patrones_url": None,
         "similitud": None,
     }
 
-    # 1. REPUTACIÓN (VirusTotal + Google Safe Browsing + PhishTank)
-    # Únicamente se considera si PhishTank confirmó que ES phishing (valid == True)
+    # Reputación: PhishTank solo confirma riesgo cuando es_phishing es True.
     es_phishing_pt = phishtank.get("es_phishing") is True
     es_malicioso_vt = vt.get("maliciosos", 0) > 0
     es_malicioso_gsb = google.get("es_maliciosa") is True
 
-    # 1 = Riesgo máximo detectado
     if es_phishing_pt or es_malicioso_vt or es_malicioso_gsb:
         indicadores["reputacion"] = 1
-    # 0 = Sin hallazgos y evaluado correctamente
     elif (
         vt.get("es_conocida") is True
         and vt.get("maliciosos") == 0
@@ -57,7 +58,6 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
     ):
         indicadores["reputacion"] = 0
 
-    # 2. ANTIGÜEDAD CON WHOIS
     dias = whois.get("dias_antiguedad")
     if isinstance(dias, (int, float)) and dias >= 0:
         if dias < 30:
@@ -67,17 +67,31 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
         else:
             indicadores["antiguedad"] = 0
 
-    # 3. ESTADO SSL
     if ssl.get("valido") is True:
         indicadores["ssl"] = 0
     elif ssl.get("valido") is False:
         indicadores["ssl"] = 1
 
-    # 4. SIMILITUD (TYPOSQUATTING)
+    # Una alerta aporta la mitad del riesgo de patrones; dos o más, el total.
+    claves_patrones = (
+        "longitud_total",
+        "cantidad_subdominios",
+        "simbolos_sospechosos",
+        "es_ip_directa",
+        "banderas_alerta",
+    )
+    if (
+        isinstance(metricas_lexicas, dict)
+        and all(clave in metricas_lexicas for clave in claves_patrones)
+        and isinstance(metricas_lexicas["banderas_alerta"], list)
+    ):
+        indicadores["patrones_url"] = min(
+            len(metricas_lexicas["banderas_alerta"]) / 2, 1
+        )
+
     if hallazgos_similitud is not None:
         indicadores["similitud"] = 1 if hallazgos_similitud else 0
 
-    # CÁLCULO
     puntos = 0
     peso_evaluado = 0
     faltantes = []
@@ -93,15 +107,12 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
     if peso_evaluado > 0:
         puntuacion_calculada = round(1 + (puntos / peso_evaluado) * 4, 2)
 
-        # AJUSTE LÓGICO DE SEGURIDAD:
-        # Si faltan datos en indicadores (WHOIS/SSL) y el cálculo daría 1.0 (Limpio por omisión),
-        # se ajusta a un piso mínimo de 2.5/5.0 para evitar dar una calificación de "completamente seguro" a ciegas.
+        # Evitar una calificación de riesgo mínimo cuando faltan datos.
         if faltantes and puntuacion_calculada < 2.5:
             puntuacion = 2.5
         else:
             puntuacion = puntuacion_calculada
 
-    # REGLA CRÍTICA PARA PHISHTANK (Override directo a riesgo máximo)
     if es_phishing_pt:
         puntuacion = 5.0
 
