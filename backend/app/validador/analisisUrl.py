@@ -82,4 +82,6 @@ def normalizacion_analisis_url(urlE: str):
         return True, url_str, metricas, None
 
     except ValidationError as e:
-        return False, None, e.errors()[0]['msg']
+        
+        error_msg = e.errors()[0].get('msg', 'URL inválida')
+        return False, None, None, error_msg
