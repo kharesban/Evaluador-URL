@@ -35,7 +35,7 @@ function ResultadoRevision({ resultado }) {
                 <strong>Puntuación de riesgo:</strong>{" "}
                 {resultado.riesgo?.puntuacion == null
                   ? "Sin información suficiente"
-                  : `${resultado.riesgo.puntuacion} / 5`}
+                  : Number(resultado.riesgo.puntuacion).toFixed(3)} / 5
               </p>
 
               <p>
