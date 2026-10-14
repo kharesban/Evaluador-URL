@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 # Logger principal de la aplicación para que los registros aparezcan en /logs
 logger = logging.getLogger("backend_app")
 
-TIEMPO_LIMITE = 4.0
+TIEMPO_LIMITE = 6.0
 
 async def _ejecutar_fuente_async(modulo_str: str, funcion_str: str, argumento: str, nombre_fuente: str) -> dict:
     t0 = perf_counter()
@@ -31,14 +31,20 @@ async def _ejecutar_fuente_async(modulo_str: str, funcion_str: str, argumento: s
             logger.error(f"[{nombre_fuente.upper()}] Tiempo: {dt}s | Estado: error (Respuesta no válida)")
             return res
         
-        # Si el dict tiene una clave 'error' con texto descriptivo real, lo tratamos como error
+        # 1. Si el módulo YA retorna la estructura normalizada {"estado": "ok", "datos": {...}}
+        if "estado" in datos and "datos" in datos:
+            datos["tiempo_ejecucion_seg"] = dt
+            alerta = " ⚠️ [EXCEDE 10s]" if dt > 10.0 else ""
+            logger.info(f"[{nombre_fuente.upper()}] Tiempo de ejecución: {dt}s | Estado: {datos['estado']}{alerta}")
+            return datos
+
+        # 2. Si el módulo retorna un dict plano sin envolver (ej. {"valido": True, "emisor": "Google"})
         error_val = datos.get("error")
         if error_val is not None and error_val is not False and str(error_val).strip() != "":
             res = {"estado": "error", "error": str(error_val), "tiempo_ejecucion_seg": dt}
             logger.error(f"[{nombre_fuente.upper()}] Tiempo: {dt}s | Estado: error ({error_val})")
             return res
         
-        # Si la fuente respondió exitosamente
         res = {"estado": "ok", "datos": datos, "tiempo_ejecucion_seg": dt}
         alerta = " ⚠️ [EXCEDE 10s]" if dt > 10.0 else ""
         logger.info(f"[{nombre_fuente.upper()}] Tiempo de ejecución: {dt}s | Estado: ok{alerta}")
@@ -139,6 +145,12 @@ async def analizar_fuentes(url: str) -> dict:
         estado = "completo"
     else:
         estado = "parcial"
+
+    #Ver que devuelve whois y ssl de forma temporal
+    print("="*60 + "\n")
+    print("➡️ WHOIS:", resultados.get("whois"))
+    print("➡️ SSL  :", resultados.get("ssl"))
+    
 
     return {
         "estado": estado,
