@@ -62,8 +62,8 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
     if isinstance(dias, (int, float)) and dias >= 0:
         if dias < 30:
             indicadores["antiguedad"] = 1
-        elif dias < 180:
-            indicadores["antiguedad"] = 0.5
+        elif dias < 730:
+            indicadores["antiguedad"] = (730 - dias) / 700
         else:
             indicadores["antiguedad"] = 0
 
@@ -91,19 +91,10 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
 
     puntuacion = None
     if peso_evaluado > 0:
-        puntuacion_calculada = round(1 + (puntos / peso_evaluado) * 4, 2)
-
-        # AJUSTE LÓGICO DE SEGURIDAD:
-        # Si faltan datos en indicadores (WHOIS/SSL) y el cálculo daría 1.0 (Limpio por omisión),
-        # se ajusta a un piso mínimo de 2.5/5.0 para evitar dar una calificación de "completamente seguro" a ciegas.
-        if faltantes and puntuacion_calculada < 2.5:
-            puntuacion = 2.5
-        else:
-            puntuacion = puntuacion_calculada
-
-    # REGLA CRÍTICA PARA PHISHTANK (Override directo a riesgo máximo)
-    if es_phishing_pt:
-        puntuacion = 5.0
+        puntuacion = round(
+            1 + 4 * puntos / sum(PESOS.values()),
+            3
+        )
 
     # HU-17: explicar cómo influyó cada indicador en el resultado.
     fuentes_reputacion = []
@@ -167,6 +158,7 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
 
     return {
         "puntuacion": puntuacion,
+        "phishing_confirmado": es_phishing_pt,
         "es_dominio_invalido": False,
         "evaluacion_completa": not faltantes,
         "cobertura_porcentaje": peso_evaluado,
@@ -174,3 +166,4 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
         "indicadores_faltantes": faltantes,
         "detalle_indicadores": detalles,
     }
+
