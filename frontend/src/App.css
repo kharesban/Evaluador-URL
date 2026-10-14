@@ -227,3 +227,18 @@
     padding: 16px;
   }
 }
+
+/* HU-17: explicación de los factores de la puntuación. */
+.detalle-riesgo { margin-top: 20px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--accent-bg); }
+.detalle-riesgo > h3 { margin: 0 0 10px; }
+.detalle-riesgo-intro { font-size: 0.9rem; }
+.lista-detalle-riesgo { list-style: none; padding: 0; margin: 12px 0 0; }
+.lista-detalle-riesgo > li { padding: 12px 0; border-top: 1px solid var(--border); }
+.detalle-riesgo-cabecera { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.lista-detalle-riesgo p { margin: 8px 0; }
+.lista-detalle-riesgo small { color: var(--text-h); opacity: 0.8; }
+.impacto { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; }
+.impacto--alto { color: #9f1239; background: #ffe4e6; }
+.impacto--medio { color: #92400e; background: #fef3c7; }
+.impacto--bajo { color: #166534; background: #dcfce7; }
+.impacto--sin-datos { color: var(--text-h); background: var(--code-bg); }
