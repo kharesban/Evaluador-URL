@@ -15,3 +15,10 @@ frontend/.env
 # Archivos del sistema operativo y editores
 .DS_Store
 Thumbs.db
+
+# Reportes QA y entornos locales
+.venv-qa/
+.coverage
+.pytest_cache/
+.ruff_cache/
+qa-results/

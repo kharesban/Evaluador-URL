@@ -23,6 +23,7 @@ async def consultar_google_safe_browsing(url: str) -> dict:
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(GOOGLE_URL, json=payload, timeout=5.0)
+            response.raise_for_status()
             data = response.json()
             
             es_maliciosa = "matches" in data
@@ -32,4 +33,4 @@ async def consultar_google_safe_browsing(url: str) -> dict:
                 "error": None
             }
         except Exception as e:
-            return {"error": f"Error al consultar Google Safe Browsing: {str(e)}"}
+            return {"error": f"Error al consultar Google Safe Browsing: {type(e).__name__}"}

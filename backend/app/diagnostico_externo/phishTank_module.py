@@ -27,6 +27,7 @@ async def consultar_phishtank(url: str) -> dict:
         variaciones.append(url_limpia + "/")
 
     try:
+        consultas_validas = 0
         async with httpx.AsyncClient(timeout=3.0, follow_redirects=True) as client:
             for u in variaciones:
                 url_encoded = quote(u, safe="")
@@ -42,6 +43,7 @@ async def consultar_phishtank(url: str) -> dict:
                     if respuesta.status_code == 200:
                         datos = respuesta.json()
                         results = datos.get("results", {})
+                        consultas_validas += 1
 
                         in_database = results.get("in_database", False)
                         valid = results.get("valid", False) # True si PhishTank confirmó que ES phishing
@@ -60,6 +62,13 @@ async def consultar_phishtank(url: str) -> dict:
                 except Exception as sub_e:
                     logger.warning(f"[PhishTank] Error evaluando variación {u}: {sub_e}")
                     continue
+
+        if consultas_validas == 0:
+            return {
+                "en_base_datos": False,
+                "es_phishing": False,
+                "error": "Servicio de PhishTank no disponible",
+            }
 
         # Si no está en la base de datos O si estuvo reportado pero 'valid' es False (falso reporte)
         return {
