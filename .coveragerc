@@ -1,0 +1,16 @@
+[run]
+branch = True
+source =
+    backend
+omit =
+    backend/main.py
+    backend/prueba_hu10.py
+    */venv/*
+    */env/*
+    */.venv/*
+
+[report]
+show_missing = True
+include_namespace_packages = True
+exclude_also =
+    if __name__ == .__main__.:
