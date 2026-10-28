@@ -1,4 +1,6 @@
-export default function ResultadoRevision({ resultado }) {
+import { Link } from "react-router-dom";
+
+export default function ResultadoRevision({ resultado, tareaId }) {
   const tiempoEjecucion =
     resultado.tiempo_ejecucion_total_seg ?? resultado.duracion_segundos ?? null;
 
@@ -32,6 +34,17 @@ export default function ResultadoRevision({ resultado }) {
           <p>
             <strong>Cobertura del análisis:</strong> {resultado.riesgo?.cobertura_porcentaje}%
           </p>
+
+          {resultado.riesgo?.explicacion_causa_efecto?.length > 0 && (
+            <section>
+              <h4>Explicación del nivel de riesgo en lenguaje sencillo</h4>
+              <ul>{resultado.riesgo.explicacion_causa_efecto.map((texto, i) => <li key={i}>{texto}</li>)}</ul>
+            </section>
+          )}
+
+          {tareaId && (
+            <p><Link to={`/reporte/${encodeURIComponent(tareaId)}`}>Abrir reporte completo</Link></p>
+          )}
 
           {resultado.riesgo?.detalle_indicadores?.length > 0 && (
             <section className="detalle-riesgo" aria-labelledby="titulo-detalle-riesgo">

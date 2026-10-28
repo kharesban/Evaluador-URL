@@ -1,39 +1,45 @@
+import asyncio
 import logging
 import sys
 import time
 from collections import deque
+from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
-
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 from dotenv import load_dotenv
-from pathlib import Path
 
 ruta_env = Path(__file__).resolve().parent / ".env"
 load_dotenv(ruta_env, override=True)
 
+# Importación de la Base de Datos SQLite y Limpieza
+from app.db.database import (
+    init_db,
+    guardar_tarea_inicial,
+    guardar_tarea_resultado,
+    obtener_tarea_por_id
+)
+from app.db.limpieza import tarea_limpieza_24h
+
 # ==========================================
 # 1. CONFIGURACIÓN DE LOGS EN MEMORIA Y CONSOLA
 # ==========================================
-# Mantiene hasta 200 eventos en memoria para el endpoint /logs
 LOG_BUFFER = deque(maxlen=200)
 
 class InMemoryLogHandler(logging.Handler):
-    """Handler personalizado para guardar los registros de log en memoria."""
+    """Handler personalizado para guardar los registros de log en memoria para /logs."""
     def emit(self, record):
         msg = self.format(record)
         LOG_BUFFER.append(msg)
 
-# Formateador global
 formatter = logging.Formatter(
     fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
-# Handlers: Consola + Memoria
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setFormatter(formatter)
 
@@ -53,7 +59,19 @@ sys.path.insert(0, str(carpeta_worker))
 
 from worker import procesar_analisis
 
-app = FastAPI(title="Evaluador de URL")
+# Ciclo de vida asíncrono Lifespan para la BD y tarea de purga a 24 horas
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Al arrancar el servidor
+    await init_db()
+    limpieza_task = asyncio.create_task(tarea_limpieza_24h(intervalo_segundos=3600))
+    
+    yield
+    
+    # Al detener el servidor
+    limpieza_task.cancel()
+
+app = FastAPI(title="Evaluador de URL", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,13 +83,8 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
-# Almacenamiento temporal de tareas en memoria
-tareas = {}
-
-
 class SolicitudAnalisis(BaseModel):
     url: HttpUrl
-
 
 # ==========================================
 # 3. PROCESAMIENTO CON MEDICIÓN DE TIEMPOS
@@ -86,40 +99,38 @@ async def ejecutar_analisis(tarea_id: str, url: str):
         
         logger.debug(f"[PERFORMANCE] Tarea {tarea_id} finalizada en {duracion:.4f}s")
 
-        tareas[tarea_id] = {
-            "id": tarea_id,
-            "estado": "completado",
-            "tiempo_ejecucion_seg": round(duracion, 4),
-            "resultado": resultado,
-        }
+        # Persistir resultado exitoso en SQLite
+        await guardar_tarea_resultado(
+            tarea_id=tarea_id,
+            estado="completado",
+            duracion=duracion,
+            resultado=resultado
+        )
     except Exception as e:
         duracion = time.perf_counter() - t_inicio
         logger.exception(f"[ERROR] Falló el análisis de la tarea {tarea_id} tras {duracion:.4f}s: {e}")
 
-        tareas[tarea_id] = {
-            "id": tarea_id,
-            "estado": "error",
-            "tiempo_ejecucion_seg": round(duracion, 4),
-            "mensaje": "No fue posible completar el análisis.",
-        }
-
+        # Persistir error en SQLite
+        await guardar_tarea_resultado(
+            tarea_id=tarea_id,
+            estado="error",
+            duracion=duracion,
+            mensaje="No fue posible completar el análisis."
+        )
 
 # ==========================================
 # 4. ENDPOINTS DE LA API
 # ==========================================
 @app.post("/analizar", status_code=202)
-def iniciar_analisis(
+async def iniciar_analisis(
     solicitud: SolicitudAnalisis,
     background_tasks: BackgroundTasks,
 ):
     tarea_id = str(uuid4())
     logger.info(f"Petición recibida en /analizar. Asignado ID: {tarea_id}")
 
-    tarea = {
-        "id": tarea_id,
-        "estado": "en_proceso",
-    }
-    tareas[tarea_id] = tarea
+    # Guardar en SQLite con estado 'en_proceso'
+    await guardar_tarea_inicial(tarea_id, estado="en_proceso")
 
     background_tasks.add_task(
         ejecutar_analisis,
@@ -127,22 +138,21 @@ def iniciar_analisis(
         str(solicitud.url),
     )
 
-    return tarea
-
+    return {"id": tarea_id, "estado": "en_proceso"}
 
 @app.get("/tareas/{tarea_id}")
-def consultar_tarea(tarea_id: str):
-    tarea = tareas.get(tarea_id)
+async def consultar_tarea(tarea_id: str):
+    # Consultar estado directamente en SQLite
+    tarea = await obtener_tarea_por_id(tarea_id)
 
     if tarea is None:
         logger.warning(f"Consulta a tarea inexistente: {tarea_id}")
         raise HTTPException(
             status_code=404,
-            detail="La tarea no existe o el servidor se reinició.",
+            detail="La tarea no existe o expiró tras 24 horas.",
         )
 
     return tarea
-
 
 @app.get("/logs", tags=["Monitoreo"])
 def obtener_logs():
