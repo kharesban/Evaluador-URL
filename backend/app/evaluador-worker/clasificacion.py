@@ -193,10 +193,10 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
         explicacion_antiguedad = "No fue posible obtener una antigüedad válida mediante WHOIS."
     elif dias < 30:
         explicacion_antiguedad = f"El dominio tiene {dias} días. Los dominios de menos de 30 días reciben riesgo alto en este indicador."
-    elif dias < 180:
-        explicacion_antiguedad = f"El dominio tiene {dias} días. Al tener menos de 180 días, este indicador aporta riesgo medio."
+    elif dias < 730:
+        explicacion_antiguedad = f"El dominio tiene {dias} días. Entre 30 y 729 días, el riesgo por antigüedad disminuye gradualmente hasta llegar a cero a los 730 días."
     else:
-        explicacion_antiguedad = f"El dominio tiene {dias} días. Supera los 180 días y no suma riesgo por antigüedad."
+        explicacion_antiguedad = f"El dominio tiene {dias} días. Tiene al menos 730 días y no suma riesgo por antigüedad."
 
     if indicadores["ssl"] == 1:
         explicacion_ssl = "El certificado SSL/TLS no es válido según la consulta; esto añade riesgo."
