@@ -65,3 +65,19 @@ def test_api_registros_limitados_a_200_y_totales_coherentes(cliente):
 
 def test_api_publica_su_contrato(cliente):
     assert {'/analizar', '/tareas/{tarea_id}', '/logs'} <= set(cliente.get('/openapi.json').json()['paths'])
+
+
+def test_salud_informa_el_commit_sin_ejecutar_analisis(cliente, monkeypatch):
+    monkeypatch.setenv('RENDER_GIT_COMMIT', 'a' * 40)
+    assert cliente.get('/health').json() == {'status': 'ok', 'commit': 'a' * 40}
+    servidor.procesar_analisis.assert_not_awaited()
+
+
+@pytest.mark.parametrize('valor,extras', [
+    ('', []),
+    ('https://frontend.onrender.com/', ['https://frontend.onrender.com']),
+    (' https://uno.onrender.com, ,https://dos.onrender.com ', ['https://uno.onrender.com', 'https://dos.onrender.com']),
+])
+def test_configuracion_cors_conserva_local_y_admite_origenes_publicados(monkeypatch, valor, extras):
+    monkeypatch.setenv('CORS_ORIGINS', valor)
+    assert servidor.origenes_permitidos() == ['http://localhost:5173', 'http://127.0.0.1:5173'] + extras

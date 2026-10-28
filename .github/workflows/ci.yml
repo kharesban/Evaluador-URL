@@ -1,4 +1,4 @@
-name: QA y build - Sprint 4
+name: QA build y CD - Sprint 4
 
 on:
   push:
@@ -119,4 +119,34 @@ jobs:
           name: frontend-dist-${{ github.run_id }}-${{ github.run_attempt }}
           path: frontend/dist/
           if-no-files-found: error
+          retention-days: 30
+
+  deploy:
+    name: CD Render
+    needs: [backend-qa, frontend-qa, backend-setup, frontend-build]
+    if: >-
+      github.event_name == 'push' &&
+      vars.RENDER_CD_ENABLED == 'true' &&
+      github.ref == format('refs/heads/{0}', vars.RENDER_DEPLOY_BRANCH || 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Desplegar y esperar el commit aprobado en ambos servicios
+        env:
+          RENDER_BACKEND_DEPLOY_HOOK: ${{ secrets.RENDER_BACKEND_DEPLOY_HOOK }}
+          RENDER_FRONTEND_DEPLOY_HOOK: ${{ secrets.RENDER_FRONTEND_DEPLOY_HOOK }}
+          RENDER_BACKEND_URL: ${{ vars.RENDER_BACKEND_URL }}
+          RENDER_FRONTEND_URL: ${{ vars.RENDER_FRONTEND_URL }}
+        run: python .github/scripts/deploy_render.py
+      - name: Conservar resultado del despliegue
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: deploy-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/deploy.json
+          if-no-files-found: warn
           retention-days: 30

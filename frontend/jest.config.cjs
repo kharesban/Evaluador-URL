@@ -2,6 +2,7 @@ const minimo = { statements: 70, branches: 70, functions: 70, lines: 70 };
 
 module.exports = {
   testEnvironment: 'jsdom',
+  globals: { __API_URL__: 'http://localhost:8000' },
   testMatch: ['<rootDir>/tests/**/*.test.[jt]s?(x)'],
   transform: { '^.+\\.[jt]sx?$': 'babel-jest' },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
