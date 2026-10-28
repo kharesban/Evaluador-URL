@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { Routes, Route } from "react-router-dom";
 import {
   iniciarAnalisis,
   esperarResultado,
 } from "./servicios/analisis.js";
-import { Routes, Route } from "react-router-dom";
 import VerLogs from "./verLogs.jsx";
-import "./App.css";
+import Reporte from "./Reporte.jsx";
 import ResultadoRevision from "./componentes/ResultadoRevision.jsx";
+import "./App.css";
 
 export function EvaluadorPrincipal() {
   const [url, setUrl] = useState("");
@@ -249,7 +250,7 @@ export function EvaluadorPrincipal() {
                 )}
 
                 {revision.resultado && (
-                  <ResultadoRevision resultado={revision.resultado} />
+                  <ResultadoRevision resultado={revision.resultado} tareaId={revision.id} />
                 )}
               </article>
             );
@@ -265,11 +266,15 @@ export function EvaluadorPrincipal() {
   );
 }
 
+// ==========================================
+// 4. RUTAS PRINCIPALES DE LA APLICACIÓN
+// ==========================================
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<EvaluadorPrincipal />} />
       <Route path="/logs" element={<VerLogs />} />
+      <Route path="/reporte/:tareaId" element={<Reporte />} />
     </Routes>
   );
 }

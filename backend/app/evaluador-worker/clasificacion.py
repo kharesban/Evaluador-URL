@@ -1,3 +1,5 @@
+# app/evaluador-worker/clasificacion.py
+
 PESOS = {
     "reputacion": 40,
     "antiguedad": 20,
@@ -5,9 +7,86 @@ PESOS = {
     "similitud": 25,
 }
 
+def generar_interpretacion_causa_efecto(indicadores, phishtank, vt, google, dias, ssl_datos, hallazgos_similitud):
+    """
+    Genera explicaciones causa-efecto en lenguaje sencillo (no técnico),
+    explicando por qué cada hallazgo eleva o reduce el riesgo, sin dar recomendaciones.
+    """
+    explicaciones = []
+
+    # Reputación
+    if indicadores["reputacion"] == 1:
+        razones_rep = []
+        if phishtank.get("es_phishing") is True:
+            razones_rep.append("reportado en PhishTank por suplantación de identidad")
+        if vt.get("maliciosos", 0) > 0:
+            razones_rep.append(f"marcado por {vt.get('maliciosos')} motores antivirus en VirusTotal")
+        if google.get("es_maliciosa") is True:
+            razones_rep.append("marcado como sitio peligroso por Google Safe Browsing")
+        
+        explicaciones.append(
+            f"El sitio figura en bases de datos de seguridad ({', '.join(razones_rep)}). "
+            "La suplantación de identidad (phishing) es una técnica utilizada para crear páginas falsas que imitan a las legítimas "
+            "con el fin de engañar a los usuarios y capturar información confidencial."
+        )
+    elif indicadores["reputacion"] == 0:
+        explicaciones.append(
+            "Ninguno de los motores de seguridad consultados (VirusTotal, Google Safe Browsing y PhishTank) "
+            "registra alertas o reportes de fraude asociados a este enlace."
+        )
+
+    # Typosquatting / Similitud
+    if indicadores["similitud"] == 1:
+        marcas = []
+        if hallazgos_similitud:
+            for h in hallazgos_similitud:
+                marcas.append(f"'{h.get('dominio')}' se asemeja a '{h.get('referencia')}'")
+        marcas_str = ", ".join(marcas) if marcas else "similitud detectada"
+        
+        explicaciones.append(
+            f"Existe una coincidencia de nombre muy cercana con marcas conocidas ({marcas_str}). "
+            "Esta técnica (conocida como suplantación de dominio o typosquatting) altera levemente el nombre de un sitio "
+            "para aprovechar errores de escritura de los usuarios y confundirlos visualmente."
+        )
+
+    # Antigüedad WHOIS
+    if indicadores["antiguedad"] is not None:
+        if dias < 30:
+            explicaciones.append(
+                f"El dominio fue registrado recientemente (hace {dias} días). "
+                "Los sitios web creados hace pocos días o semanas suelen tener un nivel de riesgo elevado, "
+                "ya que las campañas de fraude frecuentemente emplean dominios de vida muy corta."
+            )
+        elif dias >= 730:
+            explicaciones.append(
+                f"El dominio cuenta con un registro consolidado (hace {dias} días / más de 2 años), "
+                "lo que demuestra trayectoria y reduce la probabilidad de que sea un sitio temporal de engaño."
+            )
+
+    # Certificado SSL/TLS
+    if indicadores["ssl"] == 1:
+        if ssl_datos.get("autofirmado"):
+            explicaciones.append(
+                "La página utiliza un certificado de seguridad autofirmado, lo que significa que no ha sido respaldado "
+                "por una entidad certificadora independiente que confirme la autenticidad real del propietario."
+            )
+        else:
+            explicaciones.append(
+                "El sitio no cuenta con una conexión cifrada de seguridad válida (HTTPS o SSL/TLS). "
+                "Sin este sello de seguridad digital, la información que viaja entre tu navegador y la página "
+                "no está cifrada, lo que eleva el riesgo de que los datos puedan ser observados o alterados por terceros."
+            )
+    elif indicadores["ssl"] == 0:
+        explicaciones.append(
+            "El sitio posee un certificado SSL/TLS válido emitido por una autoridad reconocida, "
+            "lo que garantiza que la información transmitida entre el usuario y el servidor viaja cifrada."
+        )
+
+    return explicaciones
+
 
 def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
-    # 0. VALIDACIÓN DNS: Si el dominio no resuelve, no se otorga puntuación numérica
+    # VALIDACIÓN DNS
     if metricas_lexicas and metricas_lexicas.get("dns_resuelto") is False:
         return {
             "puntuacion": None,
@@ -17,9 +96,11 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
             "cobertura_porcentaje": 0,
             "indicadores": {},
             "indicadores_faltantes": ["reputacion", "antiguedad", "ssl", "similitud"],
+            "explicacion_causa_efecto": [
+                "No fue posible comprobar el sitio debido a que el dominio no resuelve registros DNS activos en internet."
+            ]
         }
 
-    # Solo utilizar datos de consultas que terminaron correctamente.
     def obtener_datos(nombre):
         fuente = fuentes.get(nombre, {})
         if fuente.get("estado") == "ok":
@@ -39,16 +120,13 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
         "similitud": None,
     }
 
-    # 1. REPUTACIÓN (VirusTotal + Google Safe Browsing + PhishTank)
-    # Únicamente se considera si PhishTank confirmó que ES phishing (valid == True)
+    # REPUTACIÓN
     es_phishing_pt = phishtank.get("es_phishing") is True
     es_malicioso_vt = vt.get("maliciosos", 0) > 0
     es_malicioso_gsb = google.get("es_maliciosa") is True
 
-    # 1 = Riesgo máximo detectado
     if es_phishing_pt or es_malicioso_vt or es_malicioso_gsb:
         indicadores["reputacion"] = 1
-    # 0 = Sin hallazgos y evaluado correctamente
     elif (
         vt.get("es_conocida") is True
         and vt.get("maliciosos") == 0
@@ -57,7 +135,7 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
     ):
         indicadores["reputacion"] = 0
 
-    # 2. ANTIGÜEDAD CON WHOIS
+    # ANTIGÜEDAD
     dias = whois.get("dias_antiguedad")
     if isinstance(dias, (int, float)) and dias >= 0:
         if dias < 30:
@@ -67,13 +145,13 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
         else:
             indicadores["antiguedad"] = 0
 
-    # 3. ESTADO SSL
+    # ESTADO SSL
     if ssl.get("valido") is True:
         indicadores["ssl"] = 0
     elif ssl.get("valido") is False:
         indicadores["ssl"] = 1
 
-    # 4. SIMILITUD (TYPOSQUATTING)
+    # SIMILITUD
     if hallazgos_similitud is not None:
         indicadores["similitud"] = 1 if hallazgos_similitud else 0
 
@@ -96,7 +174,7 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
             3
         )
 
-    # HU-17: explicar cómo influyó cada indicador en el resultado.
+    # HU-17: explicaciones técnicas individuales
     fuentes_reputacion = []
     if es_phishing_pt:
         fuentes_reputacion.append("PhishTank confirmó que la URL es phishing")
@@ -156,6 +234,11 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
             "contribucion_ponderada": round(valor * PESOS[clave], 2) if valor is not None else None,
         })
 
+    # NUEVO: Generar explicaciones explicativas causa-efecto en lenguaje sencillo
+    explicaciones_causa_efecto = generar_interpretacion_causa_efecto(
+        indicadores, phishtank, vt, google, dias if isinstance(dias, (int, float)) else 0, ssl, hallazgos_similitud
+    )
+
     return {
         "puntuacion": puntuacion,
         "phishing_confirmado": es_phishing_pt,
@@ -165,5 +248,5 @@ def calcular_riesgo(fuentes, hallazgos_similitud, metricas_lexicas=None):
         "indicadores": indicadores,
         "indicadores_faltantes": faltantes,
         "detalle_indicadores": detalles,
+        "explicacion_causa_efecto": explicaciones_causa_efecto  # <-- Nuevo campo para el Frontend
     }
-

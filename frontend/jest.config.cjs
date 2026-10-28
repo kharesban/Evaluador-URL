@@ -17,6 +17,7 @@ module.exports = {
   coverageThreshold: {
     global: minimo,
     './src/App.jsx': minimo,
+    './src/Reporte.jsx': minimo,
     './src/verLogs.jsx': minimo,
     './src/servicios/analisis.js': minimo,
     './src/componentes/ResultadoRevision.jsx': minimo,

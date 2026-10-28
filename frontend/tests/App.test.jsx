@@ -19,19 +19,19 @@ beforeEach(() => {
 afterEach(() => { globalThis.fetch = fetchOriginal; });
 
 test('A01: la pantalla inicial explica cómo comenzar', () => {
-  render(<EvaluadorPrincipal />);
+  render(<MemoryRouter><EvaluadorPrincipal /></MemoryRouter>);
   expect(screen.getByText('Agrega tu primer enlace para comenzar.')).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Revisar enlace' })).not.toBeInTheDocument();
 });
 test.each(['example.com', 'ftp://example.com'])('A02: rechaza una entrada sin HTTP/HTTPS: %s', url => {
-  render(<EvaluadorPrincipal />); enviar(url);
+  render(<MemoryRouter><EvaluadorPrincipal /></MemoryRouter>); enviar(url);
   expect(screen.getByRole('alert')).toHaveTextContent('Copia el enlace completo');
   expect(iniciarAnalisis).not.toHaveBeenCalled();
 });
 test('A03: muestra envío, progreso, resultado y vuelve a habilitar el formulario', async () => {
   const inicio = diferido(), final = diferido();
   iniciarAnalisis.mockReturnValue(inicio.promise); esperarResultado.mockReturnValue(final.promise);
-  render(<EvaluadorPrincipal />); enviar('  https://example.com  ');
+  render(<MemoryRouter><EvaluadorPrincipal /></MemoryRouter>); enviar('  https://example.com  ');
   expect(screen.getByText('Enviando')).toBeVisible();
   expect(screen.getByText('Se asignará al iniciar.')).toBeVisible();
   expect(screen.getByLabelText('Enlace que quieres revisar')).toBeDisabled();
@@ -48,7 +48,7 @@ test('A03: muestra envío, progreso, resultado y vuelve a habilitar el formulari
 });
 test('A04: rechaza envíos duplicados mientras hay una consulta activa', async () => {
   iniciarAnalisis.mockReturnValue(diferido().promise);
-  render(<EvaluadorPrincipal />); enviar();
+  render(<MemoryRouter><EvaluadorPrincipal /></MemoryRouter>); enviar();
   fireEvent.submit(screen.getByLabelText('Enlace que quieres revisar').closest('form'));
   expect(iniciarAnalisis).toHaveBeenCalledTimes(1);
 });
@@ -59,7 +59,7 @@ test.each([
   [new Error(''), 'No pudimos revisar este enlace.'],
 ])('A05: presenta el error de inicio al usuario: %s', async (error, mensaje) => {
   iniciarAnalisis.mockRejectedValue(error);
-  render(<EvaluadorPrincipal />); enviar();
+  render(<MemoryRouter><EvaluadorPrincipal /></MemoryRouter>); enviar();
   expect(await screen.findByRole('alert')).toHaveTextContent(mensaje);
   expect(screen.getByText('No se pudo asignar.')).toBeVisible();
   expect(screen.getByText('Sin resultado')).toBeVisible();
@@ -67,13 +67,13 @@ test.each([
 });
 test('A06: informa un error de seguimiento conservando el ID de la tarea', async () => {
   esperarResultado.mockRejectedValue(new Error('Tarea fallida'));
-  render(<EvaluadorPrincipal />); enviar();
+  render(<MemoryRouter><EvaluadorPrincipal /></MemoryRouter>); enviar();
   expect(await screen.findByRole('alert')).toHaveTextContent('Tarea fallida');
   expect(screen.getByText('id-1')).toBeVisible();
 });
 test('A07: conserva revisiones anteriores al completar una nueva', async () => {
   iniciarAnalisis.mockResolvedValueOnce('primera').mockResolvedValueOnce('segunda');
-  render(<EvaluadorPrincipal />); enviar();
+  render(<MemoryRouter><EvaluadorPrincipal /></MemoryRouter>); enviar();
   await screen.findByText('Finalizada');
   enviar('https://example.org');
   await waitFor(() => expect(screen.getAllByText('Finalizada')).toHaveLength(2));
@@ -82,7 +82,7 @@ test('A07: conserva revisiones anteriores al completar una nueva', async () => {
 test.each(['inicio', 'resultado', 'error'])('A08: desmontar cancela una consulta pendiente durante %s', async fase => {
   const inicio = diferido(), final = diferido();
   iniciarAnalisis.mockReturnValue(inicio.promise); esperarResultado.mockReturnValue(final.promise);
-  const vista = render(<EvaluadorPrincipal />); enviar();
+  const vista = render(<MemoryRouter><EvaluadorPrincipal /></MemoryRouter>); enviar();
   const signal = iniciarAnalisis.mock.calls[0][1];
   if (fase !== 'inicio') await act(async () => inicio.resolve('id'));
   vista.unmount(); expect(signal.aborted).toBe(true);

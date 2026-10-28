@@ -4,16 +4,19 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
 import servidor
+from app.db import database, limpieza
 
 
 @pytest.fixture
-def cliente(monkeypatch):
-    servidor.tareas.clear()
+def cliente(monkeypatch, tmp_path):
+    # Probar la persistencia real sin tocar evaluaciones.db del desarrollador.
+    ruta = str(tmp_path / 'evaluaciones_prueba.db')
+    monkeypatch.setattr(database, 'DB_PATH', ruta)
+    monkeypatch.setattr(limpieza, 'DB_PATH', ruta)
     servidor.LOG_BUFFER.clear()
     monkeypatch.setattr(servidor, "procesar_analisis", AsyncMock(return_value={"riesgo": {"puntuacion": 1}}))
     with TestClient(servidor.app) as client:
         yield client
-    servidor.tareas.clear()
     servidor.LOG_BUFFER.clear()
 
 
