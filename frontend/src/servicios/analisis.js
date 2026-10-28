@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:8000";
+import { API_URL } from "./config.js";
 const INTERVALO_CONSULTA_MS = 1000;
 const MAXIMO_CONSULTAS = 30;
 

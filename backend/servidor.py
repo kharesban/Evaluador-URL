@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 import time
 from collections import deque
@@ -55,18 +56,27 @@ from worker import procesar_analisis
 
 app = FastAPI(title="Evaluador de URL")
 
+
+def origenes_permitidos():
+    locales = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    publicados = [origen.strip().rstrip("/") for origen in os.getenv("CORS_ORIGINS", "").split(",") if origen.strip()]
+    return locales + publicados
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=origenes_permitidos(),
     allow_methods=["POST", "GET"],
     allow_headers=["Content-Type"],
 )
 
 # Almacenamiento temporal de tareas en memoria
 tareas = {}
+
+
+@app.get("/health", tags=["Monitoreo"])
+def salud():
+    return {"status": "ok", "commit": os.getenv("RENDER_GIT_COMMIT", "local")}
 
 
 class SolicitudAnalisis(BaseModel):

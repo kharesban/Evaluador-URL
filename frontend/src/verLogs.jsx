@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { API_URL } from "./servicios/config.js";
 
 export function VerLogs() {
   const [logs, setLogs] = useState([]);
@@ -8,7 +9,7 @@ export function VerLogs() {
 
   const obtenerLogs = async () => {
     try {
-      const res = await fetch("http://localhost:8000/logs", { cache: "no-store" });
+      const res = await fetch(`${API_URL}/logs`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setLogs(data.logs || []);
