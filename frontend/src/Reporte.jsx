@@ -1,6 +1,6 @@
-// src/paginas/Reporte.jsx
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
+import { consultarEstadoTarea } from "./servicios/analisis.js";
 
 export function Reporte() {
   const { tareaId } = useParams();
@@ -11,11 +11,7 @@ export function Reporte() {
   useEffect(() => {
     const obtenerReporte = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/tareas/${tareaId}`);
-        if (!res.ok) {
-          throw new Error("No se encontró la evaluación especificada o el registro ya expiró (24h).");
-        }
-        const data = await res.json();
+        const data = await consultarEstadoTarea(tareaId);
         setTarea(data);
       } catch (err) {
         setError(err.message);
@@ -48,8 +44,8 @@ export function Reporte() {
   }
 
   const resultado = tarea.resultado || {};
-  const explicaciones = resultado.explicacion_causa_efecto || [];
-  const puntuacion = resultado.puntuacion ?? "N/A";
+  const explicaciones = resultado.riesgo?.explicacion_causa_efecto || resultado.explicacion_causa_efecto || [];
+  const puntuacion = resultado.riesgo?.puntuacion ?? "N/A";
 
   return (
     <div style={{ maxWidth: "800px", margin: "0 auto", padding: "20px", textAlign: "left" }}>
@@ -59,12 +55,12 @@ export function Reporte() {
         </Link>
       </div>
 
-      <header style={{ borderBottom: "1px solid #333", pb: "15px", marginBottom: "25px" }}>
+      <header style={{ borderBottom: "1px solid #333", paddingBottom: "15px", marginBottom: "25px" }}>
         <h1 style={{ fontSize: "24px", marginBottom: "8px" }}>
-          📋 Informe de Diagnóstico y Causa-Efecto
+          📋 Reporte de Diagnóstico y Causa-Efecto
         </h1>
-        <p style={{ color: "#aaa", fontSize: "14px" }}>
-          ID de Análisis: <code>{tarea.id}</code>
+        <p style={{ color: "#aaa", fontSize: "14px", margin: 0 }}>
+          Identificador de Análisis: <code>{tarea.id}</code>
         </p>
       </header>
 
@@ -84,7 +80,7 @@ export function Reporte() {
         <div>
           <h3 style={{ margin: "0 0 5px 0", color: "#888", fontSize: "14px" }}>ESCALA DE RIESGO OBJETIVA</h3>
           <p style={{ margin: 0, fontSize: "28px", fontWeight: "bold" }}>
-            {puntuacion} <span style={{ fontSize: "16px", color: "#666" }}>/ 5.000</span>
+            {puntuacion !== "N/A" ? Number(puntuacion).toFixed(3) : "N/A"} <span style={{ fontSize: "16px", color: "#666" }}>/ 5</span>
           </p>
         </div>
         <div style={{ textAlign: "right" }}>
@@ -98,15 +94,15 @@ export function Reporte() {
               color: puntuacion > 3 ? "#ff8888" : "#88ff99"
             }}
           >
-            {puntuacion > 3 ? "AMENAZA DETECTADA" : "DETERMINACIÓN BAJA / NORMAL"}
+            {puntuacion === "N/A" ? "SIN INFORMACIÓN SUFICIENTE" : puntuacion > 3 ? "ALERTAS DETECTADAS" : "DETERMINACIÓN NORMAL"}
           </span>
         </div>
       </div>
 
-      {/* Sección Explicativa Causa-Efecto (Lenguaje Accesible) */}
+      {/* Sección Explicativa Causa-Efecto */}
       <section>
         <h2 style={{ fontSize: "18px", color: "#ddd", marginBottom: "15px" }}>
-          💡 Hallazgos Explicados en Lenguaje Sencillo
+          💡 Hallazgos Explicados en Lenguaje Cotidiano
         </h2>
 
         {explicaciones.length === 0 ? (
