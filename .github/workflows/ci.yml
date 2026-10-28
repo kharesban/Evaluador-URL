@@ -1,0 +1,152 @@
+name: QA build y CD - Sprint 4
+
+on:
+  push:
+    branches: [main, master, 'feature/**', 'develop/sprint-4']
+  pull_request:
+    branches: [main, master, 'develop/sprint-4']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-qa:
+    name: QA backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            requirements-dev.txt
+      - name: Instalar dependencias de la aplicación y QA
+        run: python -m pip install -r backend/requirements.txt -r requirements-dev.txt
+      - name: Verificar dependencias
+        run: python -m pip check
+      - name: Linter Python (errores críticos)
+        run: python -m ruff check backend tests .github/scripts --select E9,F63,F7,F82
+      - name: Pruebas unitarias y cobertura mínima del 70%
+        run: python -m pytest
+      - name: Resumen y umbral por módulo
+        if: ${{ always() && !cancelled() }}
+        run: python .github/scripts/qa_summary.py
+      - name: Guardar evidencias QA (también si fallan pruebas)
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: qa-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/
+          if-no-files-found: warn
+          retention-days: 30
+
+  frontend-qa:
+    name: QA frontend Jest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar frontend y herramientas de prueba
+        working-directory: frontend
+        run: npm ci
+      - name: Jest y cobertura mínima del 70% por módulo
+        working-directory: frontend
+        run: npm run test:ci
+      - name: Resumen de métricas Jest
+        if: ${{ always() && !cancelled() }}
+        working-directory: frontend
+        run: node ../.github/scripts/jest_summary.mjs
+      - name: Conservar reportes Jest incluso si falla una prueba
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: jest-${{ github.run_id }}-${{ github.run_attempt }}
+          path: frontend/qa-results/
+          if-no-files-found: warn
+          retention-days: 30
+
+  backend-setup:
+    name: Setup y arranque backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Instalar dependencias del backend
+        run: python -m pip install -r backend/requirements.txt
+      - run: python -m pip check
+      - name: Compilar módulos Python
+        run: python -m compileall -q backend
+      - name: Arrancar FastAPI y comprobar OpenAPI
+        run: python .github/scripts/smoke_backend.py
+
+  frontend-build:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Instalar frontend desde lockfile
+        working-directory: frontend
+        run: npm ci
+      - name: Construir frontend
+        working-directory: frontend
+        run: npm run build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist-${{ github.run_id }}-${{ github.run_attempt }}
+          path: frontend/dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy:
+    name: CD Render
+    needs: [backend-qa, frontend-qa, backend-setup, frontend-build]
+    if: >-
+      github.event_name == 'push' &&
+      vars.RENDER_CD_ENABLED == 'true' &&
+      github.ref == format('refs/heads/{0}', vars.RENDER_DEPLOY_BRANCH || 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Desplegar y esperar el commit aprobado en ambos servicios
+        env:
+          RENDER_BACKEND_DEPLOY_HOOK: ${{ secrets.RENDER_BACKEND_DEPLOY_HOOK }}
+          RENDER_FRONTEND_DEPLOY_HOOK: ${{ secrets.RENDER_FRONTEND_DEPLOY_HOOK }}
+          RENDER_BACKEND_URL: ${{ vars.RENDER_BACKEND_URL }}
+          RENDER_FRONTEND_URL: ${{ vars.RENDER_FRONTEND_URL }}
+        run: python .github/scripts/deploy_render.py
+      - name: Conservar resultado del despliegue
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: deploy-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qa-results/deploy.json
+          if-no-files-found: warn
+          retention-days: 30

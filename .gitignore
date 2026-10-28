@@ -5,12 +5,24 @@ backend/env/
 *.py[cod]
 *.sqlite3
 *.db
+.venv/
 
 # Archivos de entorno / secretos
 .env
 backend/.env
 frontend/.env
+.env.*
+**/.env.*
+!.env.example
+!**/.env.example
 
 # Archivos del sistema operativo y editores
 .DS_Store
 Thumbs.db
+
+# Reportes QA y entornos locales
+.venv-qa/
+.coverage
+.pytest_cache/
+.ruff_cache/
+qa-results/
