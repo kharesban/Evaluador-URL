@@ -115,7 +115,7 @@ app.add_middleware(
 @app.get("/health", tags=["Monitoreo"])
 def salud():
     return {
-        "status": "fallo_controlado",
+        "status": "ok",
         "commit": os.getenv("RENDER_GIT_COMMIT", "local"),
     }
 
