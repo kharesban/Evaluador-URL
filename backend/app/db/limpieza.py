@@ -3,7 +3,7 @@ import asyncio
 import logging
 import aiosqlite
 
-DB_PATH = "evaluaciones.db"
+from .database import DB_PATH
 logger = logging.getLogger("backend_app")
 
 async def tarea_limpieza_24h(intervalo_segundos: int = 3600):

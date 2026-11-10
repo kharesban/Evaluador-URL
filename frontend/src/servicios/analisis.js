@@ -32,7 +32,11 @@ export async function consultarEstadoTarea(tareaId, signal) {
   );
 
   if (!respuesta.ok) {
-    throw new Error("No se pudo consultar el análisis. Intenta nuevamente.");
+    const error = new Error(respuesta.status === 404
+      ? "La revisión ya no está disponible en el servidor."
+      : "No se pudo consultar el análisis. Intenta nuevamente.");
+    error.definitivo = respuesta.status === 404;
+    throw error;
   }
 
   return respuesta.json();
@@ -73,8 +77,11 @@ export async function esperarResultado(tareaId, signal) {
         }
         return tarea.resultado;
 
-      case "error":
-        throw new Error(tarea.mensaje || "No fue posible completar el análisis.");
+      case "error": {
+        const error = new Error(tarea.mensaje || "No fue posible completar el análisis.");
+        error.definitivo = true;
+        throw error;
+      }
 
       case "en_proceso":
         break; // Todavía no termina: esperar y consultar de nuevo.

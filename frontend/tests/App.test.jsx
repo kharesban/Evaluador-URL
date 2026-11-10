@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { guardarRevision } from '../src/servicios/historial.js';
 import App, { EvaluadorPrincipal } from '../src/App.jsx';
 import { esperarResultado, iniciarAnalisis } from '../src/servicios/analisis.js';
 
@@ -13,6 +14,7 @@ const enviar = (url = 'https://example.com') => {
 };
 const fetchOriginal = globalThis.fetch;
 beforeEach(() => {
+  localStorage.clear();
   iniciarAnalisis.mockReset().mockResolvedValue('id-1');
   esperarResultado.mockReset().mockResolvedValue(resultado);
 });
@@ -101,4 +103,37 @@ test('A10: la ruta de registros presenta la vista de logs real', async () => {
   globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ logs: ['Evento de prueba'] }) });
   render(<MemoryRouter initialEntries={['/logs']}><App /></MemoryRouter>);
   expect(await screen.findByText('Evento de prueba')).toBeVisible();
+});
+
+test('restaura un reporte completo al volver sin solicitar otro análisis', async () => {
+  const vista = render(<MemoryRouter><App /></MemoryRouter>);
+  enviar();
+  await screen.findByText('Finalizada');
+  vista.unmount();
+  render(<MemoryRouter><App /></MemoryRouter>);
+  fireEvent.click(screen.getByRole('link', { name: 'Abrir reporte completo' }));
+  expect(await screen.findByRole('heading', { name: /Reporte de Diagnóstico/ })).toBeVisible();
+  expect(screen.getByText(/1\.000/)).toBeVisible();
+  expect(iniciarAnalisis).toHaveBeenCalledTimes(1);
+  expect(esperarResultado).toHaveBeenCalledTimes(1);
+});
+
+test('reanuda una consulta pendiente mediante el mismo identificador', async () => {
+  guardarRevision({ clave: 'clave', id: 'pendiente', url: 'https://example.org', fecha: 1, estado: 'en_proceso' });
+  render(<MemoryRouter><App /></MemoryRouter>);
+  expect(await screen.findByText('Finalizada')).toBeVisible();
+  expect(esperarResultado).toHaveBeenCalledWith('pendiente', expect.any(AbortSignal));
+  expect(iniciarAnalisis).not.toHaveBeenCalled();
+});
+
+test('avisa si no hay espacio para conservar la revisión', async () => {
+  const bloqueo = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Cuota'); });
+  try {
+    render(<MemoryRouter><App /></MemoryRouter>);
+    enviar();
+    expect(await screen.findByText('Finalizada')).toBeVisible();
+    expect(screen.getByRole('alert')).toHaveTextContent('no pudo guardar');
+  } finally {
+    bloqueo.mockRestore();
+  }
 });

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import {
   iniciarAnalisis,
   esperarResultado,
 } from "./servicios/analisis.js";
+import { guardarRevision, listarRevisiones } from "./servicios/historial.js";
 import VerLogs from "./verLogs.jsx";
 import Reporte from "./Reporte.jsx";
 import ResultadoRevision from "./componentes/ResultadoRevision.jsx";
@@ -13,11 +14,24 @@ export function EvaluadorPrincipal() {
   const [url, setUrl] = useState("");
   const [mensaje, setMensaje] = useState("");
 
-  const [revisiones, setRevisiones] = useState([]);
+  const [revisiones, setRevisiones] = useState(listarRevisiones);
+  const [avisoGuardado, setAvisoGuardado] = useState("");
   const consultasActivas = useRef(new Map());
+
+  const reanudarRevision = useEffectEvent(seguirRevision);
 
   useEffect(() => {
     const consultas = consultasActivas.current;
+    for (const revision of listarRevisiones()) {
+      if (revision.estado !== "en_proceso") continue;
+      const controlador = new AbortController();
+      consultas.set(revision.clave, { controlador });
+      reanudarRevision(revision, controlador.signal).finally(() => {
+        if (consultas.get(revision.clave)?.controlador === controlador) {
+          consultas.delete(revision.clave);
+        }
+      });
+    }
     return () => {
       for (const { controlador } of consultas.values()) {
         controlador.abort();
@@ -34,6 +48,34 @@ export function EvaluadorPrincipal() {
           : revision
       )
     );
+  }
+
+  function conservar(revision) {
+    if (!guardarRevision(revision)) {
+      setAvisoGuardado("El navegador no pudo guardar esta revisión. Copia el enlace al reporte antes de salir.");
+    }
+  }
+
+  async function seguirRevision(revision, signal) {
+    try {
+      const resultado = await esperarResultado(revision.id, signal);
+      if (signal.aborted) return;
+      const cambios = { estado: "completado", resultado, error: "" };
+      conservar({ ...revision, ...cambios });
+      actualizarRevision(revision.clave, cambios);
+    } catch (error) {
+      if (signal.aborted) return;
+      const cambios = { estado: "error", error: explicarError(error) };
+      // Una interrupción de red se vuelve a consultar por ID en la próxima visita.
+      if (error.definitivo) conservar({ ...revision, ...cambios });
+      actualizarRevision(revision.clave, cambios);
+    }
+  }
+
+  function explicarError(error) {
+    if (error instanceof TypeError) return "No pudimos conectarnos para revisar tu enlace. Intenta nuevamente en unos momentos.";
+    if (error instanceof SyntaxError) return "No pudimos leer el resultado. Intenta nuevamente.";
+    return error.message || "No pudimos revisar este enlace.";
   }
 
   async function analizarURL(evento) {
@@ -77,32 +119,16 @@ export function EvaluadorPrincipal() {
       const tareaId = await iniciarAnalisis(urlLimpia, signal);
       if (signal.aborted) return;
 
-      actualizarRevision(clave, {
-        id: tareaId,
-        estado: "en_proceso",
-      });
-
-      const resultado = await esperarResultado(tareaId, signal);
-      if (signal.aborted) return;
-
-      actualizarRevision(clave, {
-        estado: "completado",
-        resultado,
-      });
+      const revision = {
+        clave, id: tareaId, url: urlLimpia, fecha: Date.now(),
+        estado: "en_proceso", resultado: null, error: "",
+      };
+      conservar(revision);
+      actualizarRevision(clave, revision);
+      await seguirRevision(revision, signal);
     } catch (error) {
       if (signal.aborted) return;
-
-      const explicacion =
-        error instanceof TypeError
-          ? "No pudimos conectarnos para revisar tu enlace. Intenta nuevamente en unos momentos."
-          : error instanceof SyntaxError
-            ? "No pudimos leer el resultado. Intenta nuevamente."
-            : error.message || "No pudimos revisar este enlace.";
-
-      actualizarRevision(clave, {
-        estado: "error",
-        error: explicacion,
-      });
+      actualizarRevision(clave, { estado: "error", error: explicarError(error) });
     } finally {
       consultasActivas.current.delete(clave);
     }
@@ -172,6 +198,8 @@ export function EvaluadorPrincipal() {
           aria-labelledby="titulo-revisiones"
         >
           <h2 id="titulo-revisiones">Mis revisiones</h2>
+
+          {avisoGuardado && <p className="error" role="alert">{avisoGuardado}</p>}
 
           <p className="resumen-revisiones" role="status">
             {revisiones.length === 0
@@ -257,8 +285,8 @@ export function EvaluadorPrincipal() {
           })}
 
           <p className="ayuda">
-            Esta lista se conserva mientras mantengas abierta
-            la página, sin recargarla.
+            Tus revisiones se guardan en este navegador. Puedes volver a abrir los reportes
+            finalizados aunque cierres la página. Si borras los datos del sitio, se elimina esta copia.
           </p>
         </section>
       </div>

@@ -2,26 +2,37 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { consultarEstadoTarea } from "./servicios/analisis.js";
 
+import { leerRevision } from "./servicios/historial.js";
+
 export function Reporte() {
   const { tareaId } = useParams();
-  const [tarea, setTarea] = useState(null);
-  const [cargando, setCargando] = useState(true);
+  return <DetalleReporte key={tareaId} tareaId={tareaId} />;
+}
+
+function DetalleReporte({ tareaId }) {
+  const [copia] = useState(() => leerRevision(tareaId));
+  const reporteGuardado = copia?.estado === "completado" && copia.resultado ? copia : null;
+  const [tarea, setTarea] = useState(reporteGuardado);
+  const [cargando, setCargando] = useState(!reporteGuardado);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (reporteGuardado) return;
+    const controlador = new AbortController();
     const obtenerReporte = async () => {
       try {
-        const data = await consultarEstadoTarea(tareaId);
-        setTarea(data);
+        const data = await consultarEstadoTarea(tareaId, controlador.signal);
+        if (!controlador.signal.aborted) setTarea(data);
       } catch (err) {
-        setError(err.message);
+        if (!controlador.signal.aborted) setError(err.message);
       } finally {
-        setCargando(false);
+        if (!controlador.signal.aborted) setCargando(false);
       }
     };
 
     if (tareaId) obtenerReporte();
-  }, [tareaId]);
+    return () => controlador.abort();
+  }, [tareaId, reporteGuardado]);
 
   if (cargando) {
     return (

@@ -70,17 +70,17 @@ async def lifespan(app: FastAPI):
 
     await init_db()
 
-    limpieza_task = asyncio.create_task(
-        tarea_limpieza_24h(intervalo_segundos=3600)
-    )
+    limpieza_task = None
+    if os.getenv("SQLITE_CONSERVAR_HISTORIAL", "0") != "1":
+        limpieza_task = asyncio.create_task(tarea_limpieza_24h(intervalo_segundos=3600))
 
     try:
         yield
     finally:
-        limpieza_task.cancel()
-
-        with suppress(asyncio.CancelledError):
-            await limpieza_task
+        if limpieza_task is not None:
+            limpieza_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await limpieza_task
 
 
 app = FastAPI(
@@ -184,6 +184,7 @@ async def iniciar_analisis(
     await guardar_tarea_inicial(
         tarea_id,
         estado="en_proceso",
+        url=str(solicitud.url),
     )
 
     background_tasks.add_task(
@@ -210,7 +211,7 @@ async def consultar_tarea(tarea_id: str):
 
         raise HTTPException(
             status_code=404,
-            detail="La tarea no existe o expiró tras 24 horas.",
+            detail="La revisión no está disponible en esta base de datos.",
         )
 
     return tarea
