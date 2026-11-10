@@ -63,3 +63,20 @@ def test_limpieza_registra_un_fallo_y_no_termina_silenciosamente(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(limpieza.tarea_limpieza_24h())
     assert 'base no disponible' in registrar.call_args.args[0]
+
+
+def test_migracion_anade_la_url_y_respeta_reportes_existentes(ruta_db):
+    import sqlite3
+    with sqlite3.connect(ruta_db) as db:
+        db.execute("""CREATE TABLE tareas (id TEXT PRIMARY KEY, estado TEXT NOT NULL,
+            tiempo_ejecucion_seg REAL, resultado JSON, mensaje TEXT,
+            fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP)""")
+        db.execute("INSERT INTO tareas (id, estado, resultado) VALUES (?, ?, ?)",
+                   ('legado', 'completado', '{"texto":"anterior"}'))
+    async def verificar():
+        await database.init_db()
+        await database.init_db()
+        assert (await database.obtener_tarea_por_id('legado'))['resultado']['texto'] == 'anterior'
+        await database.guardar_tarea_inicial('nuevo', url='https://example.org')
+        assert (await database.obtener_tarea_por_id('nuevo'))['url'] == 'https://example.org'
+    asyncio.run(verificar())

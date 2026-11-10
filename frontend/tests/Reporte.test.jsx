@@ -18,7 +18,7 @@ test('R01: abre el reporte real y presenta puntuación y explicación recibidas'
   expect(screen.getByText('ALERTAS DETECTADAS')).toBeVisible();
   expect(screen.getByText(/4.200/)).toBeVisible();
   expect(screen.getByRole('link', { name: /Volver al Evaluador/ })).toHaveAttribute('href', '/');
-  expect(globalThis.fetch).toHaveBeenCalledWith('http://localhost:8000/tareas/id-prueba', { cache: 'no-store', signal: undefined });
+  expect(globalThis.fetch).toHaveBeenCalledWith('http://localhost:8000/tareas/id-prueba', { cache: 'no-store', signal: expect.any(AbortSignal) });
 });
 
 test('R02: presenta puntuación baja y ausencia de observaciones adicionales', async () => {
@@ -49,7 +49,7 @@ test('R05: una respuesta nula presenta reporte no disponible', async () => {
 
 test('R06: el rechazo HTTP conserva la explicación de error del servicio', async () => {
   globalThis.fetch.mockResolvedValue({ ok: false, status: 404 }); mostrar();
-  expect(await screen.findByText(/No se pudo consultar el análisis/)).toBeVisible();
+  expect(await screen.findByText(/ya no está disponible/)).toBeVisible();
   expect(screen.getByRole('link', { name: /Volver al inicio/ })).toHaveAttribute('href', '/');
 });
 

@@ -42,10 +42,6 @@ export default function ResultadoRevision({ resultado, tareaId }) {
             </section>
           )}
 
-          {tareaId && (
-            <p><Link to={`/reporte/${encodeURIComponent(tareaId)}`}>Abrir reporte completo</Link></p>
-          )}
-
           {resultado.riesgo?.detalle_indicadores?.length > 0 && (
             <section className="detalle-riesgo" aria-labelledby="titulo-detalle-riesgo">
               <h3 id="titulo-detalle-riesgo">¿Por qué obtuvimos esta calificación?</h3>
@@ -172,6 +168,9 @@ export default function ResultadoRevision({ resultado, tareaId }) {
             </div>
           )}
         </>
+      )}
+      {tareaId && (
+        <p><Link to={`/reporte/${encodeURIComponent(tareaId)}`}>Abrir reporte completo</Link></p>
       )}
     </div>
   );

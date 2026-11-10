@@ -81,3 +81,23 @@ def test_salud_informa_el_commit_sin_ejecutar_analisis(cliente, monkeypatch):
 def test_configuracion_cors_conserva_local_y_admite_origenes_publicados(monkeypatch, valor, extras):
     monkeypatch.setenv('CORS_ORIGINS', valor)
     assert servidor.origenes_permitidos() == ['http://localhost:5173', 'http://127.0.0.1:5173'] + extras
+
+
+def test_historial_configurado_sobrevive_al_reinicio_y_a_24_horas(monkeypatch, tmp_path):
+    import sqlite3
+    ruta = str(tmp_path / 'historial.db')
+    monkeypatch.setattr(database, 'DB_PATH', ruta)
+    monkeypatch.setattr(limpieza, 'DB_PATH', ruta)
+    monkeypatch.setenv('SQLITE_CONSERVAR_HISTORIAL', '1')
+    analisis = AsyncMock(return_value={'riesgo': {'puntuacion': 2}})
+    monkeypatch.setattr(servidor, 'procesar_analisis', analisis)
+    with TestClient(servidor.app) as client:
+        tarea = client.post('/analizar', json={'url': 'https://example.org'}).json()['id']
+    with sqlite3.connect(ruta) as db:
+        db.execute("UPDATE tareas SET fecha_creacion = datetime('now', '-2 days') WHERE id = ?", (tarea,))
+    with TestClient(servidor.app) as client:
+        reporte = client.get('/tareas/' + tarea).json()
+        assert reporte['url'] == 'https://example.org/'
+        assert reporte['id'] == tarea
+        assert reporte['resultado']['riesgo']['puntuacion'] == 2
+    analisis.assert_awaited_once()

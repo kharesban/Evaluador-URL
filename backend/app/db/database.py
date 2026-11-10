@@ -1,14 +1,16 @@
 # app/db/database.py
 import json
 import logging
+import os
 import aiosqlite
 
-DB_PATH = "evaluaciones.db"
+DB_PATH = os.getenv("SQLITE_DB_PATH", "evaluaciones.db")
 logger = logging.getLogger("backend_app")
 
 async def init_db():
     """Crea la tabla de tareas/evaluaciones en SQLite si no existe."""
     async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("BEGIN IMMEDIATE")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS tareas (
                 id TEXT PRIMARY KEY,
@@ -19,15 +21,19 @@ async def init_db():
                 fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        async with db.execute("PRAGMA table_info(tareas)") as cursor:
+            columnas = {fila[1] for fila in await cursor.fetchall()}
+        if "url" not in columnas:
+            await db.execute("ALTER TABLE tareas ADD COLUMN url TEXT")
         await db.commit()
-        logger.info("[BD] Tabla 'tareas' inicializada en SQLite (evaluaciones.db).")
+        logger.info("[BD] Tabla 'tareas' inicializada en SQLite.")
 
-async def guardar_tarea_inicial(tarea_id: str, estado: str = "en_proceso"):
+async def guardar_tarea_inicial(tarea_id: str, estado: str = "en_proceso", url: str | None = None):
     """Registra la tarea al momento del POST /analizar."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "INSERT INTO tareas (id, estado) VALUES (?, ?)",
-            (tarea_id, estado)
+            "INSERT INTO tareas (id, estado, url) VALUES (?, ?, ?)",
+            (tarea_id, estado, url)
         )
         await db.commit()
 
@@ -55,7 +61,7 @@ async def obtener_tarea_por_id(tarea_id: str) -> dict | None:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT id, estado, tiempo_ejecucion_seg, resultado, mensaje FROM tareas WHERE id = ?",
+            "SELECT id, estado, tiempo_ejecucion_seg, resultado, mensaje, url FROM tareas WHERE id = ?",
             (tarea_id,)
         ) as cursor:
             row = await cursor.fetchone()
@@ -66,6 +72,8 @@ async def obtener_tarea_por_id(tarea_id: str) -> dict | None:
                 "id": row["id"],
                 "estado": row["estado"],
             }
+            if row["url"] is not None:
+                res_dict["url"] = row["url"]
             if row["tiempo_ejecucion_seg"] is not None:
                 res_dict["tiempo_ejecucion_seg"] = row["tiempo_ejecucion_seg"]
             if row["resultado"]:
