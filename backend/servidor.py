@@ -9,19 +9,22 @@ from pathlib import Path
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, HttpUrl
 
 ruta_env = Path(__file__).resolve().parent / ".env"
-load_dotenv(ruta_env, override=True)
+load_dotenv(ruta_env, override=False)
 
-# Importación de la base de datos SQLite y limpieza
+# Importación de persistencia compartida y limpieza opcional
 from app.db.database import (
     init_db,
     guardar_tarea_inicial,
     guardar_tarea_resultado,
     obtener_tarea_por_id,
+    listar_tareas,
+    close_db,
+    backend_activo,
 )
 from app.db.limpieza import tarea_limpieza_24h
 
@@ -66,12 +69,14 @@ from worker import procesar_analisis
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Inicializa SQLite y administra la tarea de limpieza."""
+    """Inicializa la base de datos y conserva el historial por defecto."""
 
     await init_db()
+    logger.info("[BD] Motor activo: %s", backend_activo())
 
     limpieza_task = None
-    if os.getenv("SQLITE_CONSERVAR_HISTORIAL", "0") != "1":
+    # La purga queda desactivada por defecto para no borrar el historial compartido.
+    if os.getenv("ENABLE_TASK_CLEANUP", "0") == "1":
         limpieza_task = asyncio.create_task(tarea_limpieza_24h(intervalo_segundos=3600))
 
     try:
@@ -81,6 +86,7 @@ async def lifespan(app: FastAPI):
             limpieza_task.cancel()
             with suppress(asyncio.CancelledError):
                 await limpieza_task
+        await close_db()
 
 
 app = FastAPI(
@@ -141,7 +147,7 @@ async def ejecutar_analisis(tarea_id: str, url: str):
             f"[PERFORMANCE] Tarea {tarea_id} finalizada en {duracion:.4f}s"
         )
 
-        # Persistir resultado exitoso en SQLite
+        # Persistir resultado exitoso en la base compartida
         await guardar_tarea_resultado(
             tarea_id=tarea_id,
             estado="completado",
@@ -157,7 +163,7 @@ async def ejecutar_analisis(tarea_id: str, url: str):
             f"tras {duracion:.4f}s: {e}"
         )
 
-        # Persistir error en SQLite
+        # Persistir error en la base compartida
         await guardar_tarea_resultado(
             tarea_id=tarea_id,
             estado="error",
@@ -180,7 +186,7 @@ async def iniciar_analisis(
         f"Petición recibida en /analizar. Asignado ID: {tarea_id}"
     )
 
-    # Guardar en SQLite con estado en_proceso
+    # La evaluación queda guardada en la base de datos compartida.
     await guardar_tarea_inicial(
         tarea_id,
         estado="en_proceso",
@@ -199,9 +205,18 @@ async def iniciar_analisis(
     }
 
 
+@app.get("/tareas", tags=["Historial compartido"])
+async def consultar_historial(
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    """Devuelve evaluaciones compartidas, ordenadas de más recientes a antiguas."""
+    return await listar_tareas(limit=limit, offset=offset)
+
+
 @app.get("/tareas/{tarea_id}")
 async def consultar_tarea(tarea_id: str):
-    # Consultar estado directamente en SQLite
+    # Consultar estado y resultado en la base de datos compartida.
     tarea = await obtener_tarea_por_id(tarea_id)
 
     if tarea is None:

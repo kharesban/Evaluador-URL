@@ -21,6 +21,7 @@ def main():
                 with urlopen("http://127.0.0.1:8765/openapi.json", timeout=2) as respuesta:
                     documento = json.load(respuesta)
                 assert "/analizar" in documento["paths"]
+                assert "/tareas" in documento["paths"]
                 assert "/tareas/{tarea_id}" in documento["paths"]
                 print("OK: FastAPI/Uvicorn arrancó y publicó los endpoints esperados.")
                 return

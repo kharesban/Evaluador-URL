@@ -161,3 +161,15 @@ Para consultar la reputación del dominio en múltiples motores antivirus:
 ---
 
 El módulo de PhishTank no requiere credenciales de API ni token de autenticación. Funciona realizando peticiones HTTP asíncronas directas a los servicios públicos de comprobación de PhishTank enviando un encabezado User-Agent personalizado para evitar bloqueos por rate-limiting.
+
+---
+
+## Historial compartido y base de datos
+
+El backend conserva SQLite para desarrollo local cuando `DATABASE_URL` no está definida. En Render, configura `DATABASE_URL` con la cadena PostgreSQL de Neon (preferiblemente la opción **Connection pooling**). El backend selecciona PostgreSQL automáticamente, crea la tabla `tareas` al iniciar y guarda allí los estados, las URL y los reportes completos.
+
+El frontend consulta el historial desde `GET /tareas` y recupera cada reporte desde `GET /tareas/{id}`. El historial es compartido y no requiere cuentas: cualquier visitante de la aplicación puede ver todas las evaluaciones. Por eso, no se deben analizar enlaces que incluyan tokens, contraseñas o parámetros privados.
+
+La limpieza automática está desactivada por defecto para conservar las evaluaciones. No configures `ENABLE_TASK_CLEANUP=1` salvo que quieras activar expresamente la eliminación de registros con más de 24 horas.
+
+Consulta [docs/HISTORIAL_COMPARTIDO_NEON.md](docs/HISTORIAL_COMPARTIDO_NEON.md) para la configuración de Render, el funcionamiento local con SQLite y la importación opcional de un historial SQLite anterior a Neon.
