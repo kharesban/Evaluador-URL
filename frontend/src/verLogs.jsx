@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { API_URL } from "./servicios/config.js";
@@ -6,42 +7,79 @@ export function VerLogs() {
   const [logs, setLogs] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [autoUpdate, setAutoUpdate] = useState(true);
-
-  const obtenerLogs = async () => {
-    try {
-      const res = await fetch(`${API_URL}/logs`, { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        setLogs(data.logs || []);
-      }
-    } catch (err) {
-      console.error("Error consultando logs:", err);
-    } finally {
-      setCargando(false);
-    }
-  };
+  const [actualizacionManual, setActualizacionManual] = useState(0);
 
   useEffect(() => {
+    let activo = true;
+
+    const obtenerLogs = () => {
+      fetch(`${API_URL}/logs`, { cache: "no-store" })
+        .then((res) => {
+          if (!res.ok) {
+            throw new Error("No se pudieron consultar los registros.");
+          }
+          return res.json();
+        })
+        .then((data) => {
+          if (activo) {
+            setLogs(Array.isArray(data.logs) ? data.logs : []);
+          }
+        })
+        .catch((err) => {
+          if (activo) {
+            console.error("Error consultando logs:", err);
+          }
+        })
+        .finally(() => {
+          if (activo) {
+            setCargando(false);
+          }
+        });
+    };
+
+    // Primera consulta inmediata al ingresar.
     obtenerLogs();
-    if (!autoUpdate) return;
 
-    const interval = setInterval(() => {
-      obtenerLogs();
-    }, 2000);
+    const intervalo = autoUpdate
+      ? window.setInterval(obtenerLogs, 2000)
+      : null;
 
-    return () => clearInterval(interval);
-  }, [autoUpdate]);
+    return () => {
+      activo = false;
+
+      if (intervalo !== null) {
+        window.clearInterval(intervalo);
+      }
+    };
+  }, [autoUpdate, actualizacionManual]);
 
   return (
-    <div className="contenedor-logs" style={{ textAlign: "left", padding: "20px" }}>
+    <div
+      className="contenedor-logs"
+      style={{ textAlign: "left", padding: "20px" }}
+    >
       <div style={{ marginBottom: "15px" }}>
-        <Link to="/" style={{ color: "#646cff", textDecoration: "none", fontWeight: "bold" }}>
+        <Link
+          to="/"
+          style={{
+            color: "#646cff",
+            textDecoration: "none",
+            fontWeight: "bold",
+          }}
+        >
           ← Volver al Evaluador
         </Link>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
         <h2>📜 Logs y Tiempos de Servidor</h2>
+
         <div>
           <label style={{ marginRight: "10px" }}>
             <input
@@ -51,7 +89,14 @@ export function VerLogs() {
             />{" "}
             Auto-actualizar (2s)
           </label>
-          <button onClick={obtenerLogs}>Refrescar</button>
+
+          <button
+            onClick={() =>
+              setActualizacionManual((actual) => actual + 1)
+            }
+          >
+            Refrescar
+          </button>
         </div>
       </div>
 
@@ -70,10 +115,12 @@ export function VerLogs() {
             fontFamily: "monospace",
             whiteSpace: "pre-wrap",
             wordBreak: "break-all",
-            marginTop: "15px"
+            marginTop: "15px",
           }}
         >
-          {logs.length === 0 ? "No hay registros disponibles." : logs.join("\n")}
+          {logs.length === 0
+            ? "No hay registros disponibles."
+            : logs.join("\n")}
         </pre>
       )}
     </div>

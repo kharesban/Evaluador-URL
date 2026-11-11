@@ -2,22 +2,17 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { consultarEstadoTarea } from "./servicios/analisis.js";
 
-import { leerRevision } from "./servicios/historial.js";
-
 export function Reporte() {
   const { tareaId } = useParams();
   return <DetalleReporte key={tareaId} tareaId={tareaId} />;
 }
 
 function DetalleReporte({ tareaId }) {
-  const [copia] = useState(() => leerRevision(tareaId));
-  const reporteGuardado = copia?.estado === "completado" && copia.resultado ? copia : null;
-  const [tarea, setTarea] = useState(reporteGuardado);
-  const [cargando, setCargando] = useState(!reporteGuardado);
+  const [tarea, setTarea] = useState(null);
+  const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (reporteGuardado) return;
     const controlador = new AbortController();
     const obtenerReporte = async () => {
       try {
@@ -32,7 +27,7 @@ function DetalleReporte({ tareaId }) {
 
     if (tareaId) obtenerReporte();
     return () => controlador.abort();
-  }, [tareaId, reporteGuardado]);
+  }, [tareaId]);
 
   if (cargando) {
     return (

@@ -1,26 +1,30 @@
-# app/db/limpieza.py
+"""Limpieza opcional de evaluaciones antiguas.
+
+La aplicación no inicia esta tarea automáticamente: el historial compartido
+se conserva indefinidamente salvo que el operador active explícitamente la purga.
+"""
+
 import asyncio
 import logging
-import aiosqlite
 
-from .database import DB_PATH
+from .database import eliminar_tareas_antiguas
+
 logger = logging.getLogger("backend_app")
 
+
 async def tarea_limpieza_24h(intervalo_segundos: int = 3600):
-    """Se ejecuta en segundo plano y elimina los registros con más de 24 horas de antigüedad."""
+    """Purga registros con más de 24 horas mientras la tarea siga activa."""
     while True:
         try:
-            async with aiosqlite.connect(DB_PATH) as db:
-                cursor = await db.execute("""
-                    DELETE FROM tareas 
-                    WHERE fecha_creacion < datetime('now', '-24 hours')
-                """)
-                await db.commit()
-                if cursor.rowcount > 0:
-                    logger.info(f"[BD LIMPIEZA] Purgadas {cursor.rowcount} evaluaciones con antigüedad mayor a 24h.")
+            eliminadas = await eliminar_tareas_antiguas(24)
+            if eliminadas:
+                logger.info(
+                    "[BD LIMPIEZA] Purgadas %s evaluaciones con antigüedad mayor a 24h.",
+                    eliminadas,
+                )
         except asyncio.CancelledError:
-            break
-        except Exception as e:
-            logger.error(f"[BD LIMPIEZA ERROR] Fallo durante la purga: {e}")
-            
+            raise
+        except Exception as exc:
+            logger.error("[BD LIMPIEZA ERROR] Fallo durante la purga: %s", exc)
+
         await asyncio.sleep(intervalo_segundos)
